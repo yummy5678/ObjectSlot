@@ -17,18 +17,11 @@ C++17向けのヘッダーオンリー メモリプールライブラリ。
 - C++17以上
 - 標準ライブラリのみ使用（外部依存なし）
 
-## インストール
-
-`MemorySlot.h` をプロジェクトにコピーするだけ。
-```cpp
-#include "MemorySlot.h"
-```
-
 ## 使用例
 
 ### 基本的な使い方
 ```cpp
-#include "MemorySlot.h"
+#include "ObjectSlot.h"
 
 struct Mesh {
     std::string name;
