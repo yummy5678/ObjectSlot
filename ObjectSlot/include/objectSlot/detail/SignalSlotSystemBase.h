@@ -9,6 +9,9 @@ template<typename T>
 class SignalSlotPtr;
 
 template<typename T>
+class WeakSignalSlotPtr;
+
+template<typename T>
 class Subscription;
 
 /**
@@ -17,8 +20,6 @@ class Subscription;
  * ObjectSlotSystemBaseを継承し、購読パターンによる解放通知機能を追加する。
  * 要素が解放される際に、登録された全てのコールバックを登録の逆順に実行する。
  *
- * 逆順通知により、後から登録された依存リソースが先に解放されるため、
- * Vulkanの解放順序制約に適合する。
  *
  * 主な責任:
  * - 要素ごとの購読リスト管理
@@ -30,6 +31,7 @@ class Subscription;
 template<typename T>
 class SignalSlotSystemBase : public ObjectSlotSystemBase<T> {
     friend class SignalSlotPtr<T>;
+    friend class WeakSignalSlotPtr<T>;
     friend class Subscription<T>;
 
 public:
@@ -167,6 +169,32 @@ protected:
                 return entry.id == subscriptionId;
             });
         entries.erase(it, entries.end());
+    }
+
+
+    /**
+     * @brief 購読のコールバックを差し替え
+     *
+     * 指定IDの購読コールバックを新しい関数に更新する。
+     * 購読IDは変更せず、実行される関数だけを入れ替える。
+     *
+     * 主な用途:
+     * - ムーブ操作でキャプチャ済みのthisポインタを
+     *   新しいインスタンスのアドレスに差し替える場合
+     *
+     * @param slotIndex 購読先のスロットインデックス
+     * @param subscriptionId 差し替え対象の購読ID
+     * @param newCallback 新しいコールバック関数
+     */
+    void UpdateSubscriptionCallback(uint32_t slotIndex, uint32_t subscriptionId, SubscriptionCallback newCallback) {
+        if (slotIndex >= m_subscriptions.size()) return;
+        auto& entries = m_subscriptions[slotIndex].entries;
+        for (auto& entry : entries) {
+            if (entry.id == subscriptionId) {
+                entry.callback = std::move(newCallback);
+                return;
+            }
+        }
     }
 
     /**

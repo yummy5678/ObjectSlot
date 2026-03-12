@@ -41,19 +41,48 @@ public:
     }
 
     /**
-     * @brief SlotRefのポインタ更新用の登録を解除
-     *
-     * SlotRefが破棄・ムーブされる際に呼ばれ、
-     * 登録リストから該当エントリを削除する。
-     *
-     * @param ptrLocation SlotRef内のm_ptrのアドレス
-     */
-    void UnregisterRef(void** ptrLocation) override {
-        auto it = std::remove_if(m_refEntries.begin(), m_refEntries.end(),
-            [ptrLocation](const RefEntry& entry) {
-                return entry.ptrLocation == ptrLocation;
-            });
-        m_refEntries.erase(it, m_refEntries.end());
+    * @brief SlotRefの登録を解除し、対応するスロットインデックスを返す
+    *
+    * 登録リストから該当エントリを検索・削除し、
+    * そのエントリが指していたスロットインデックスを返す。
+    * エイリアシングSlotRefの場合、m_ptrからインデックスを
+    * 逆算できないため、この戻り値が唯一のインデックス取得手段となる。
+    *
+    * @param ptrLocation SlotRef内のm_ptrのアドレス
+    * @return 対応するスロットインデックス。見つからない場合はINVALID_INDEX
+    */
+    uint32_t UnregisterRef(void** ptrLocation) override {
+        for (auto it = m_refEntries.begin(); it != m_refEntries.end(); ++it) {
+            if (it->ptrLocation == ptrLocation) {
+                uint32_t index = it->slotIndex;
+                m_refEntries.erase(it);
+                return index;
+            }
+        }
+        return SlotHandle::INVALID_INDEX;
+    }
+
+    /**
+    * @brief ptrLocationから対応するスロットインデックスを検索する
+    *
+    * 登録を解除せずにインデックスのみを返す。
+    * SlotRefのコピー操作時、コピー元のスロットインデックスを
+    * 取得するために使用する。
+    *
+    * エイリアシングSlotRefではm_ptrがプール外を指すため、
+    * IndexFromRawPtr()ではインデックスを算出できない。
+    * この関数は登録リストから正しいインデックスを返す。
+    *
+    * @param ptrLocation SlotRef内のm_ptrのアドレス
+    * @return 対応するスロットインデックス。見つからない場合はINVALID_INDEX
+    */
+    uint32_t FindIndexByRef(const void* ptrLocation) const override {
+        for (const auto& entry : m_refEntries) {
+            if (static_cast<const void*>(entry.ptrLocation) == ptrLocation) {
+                return entry.slotIndex;
+            }
+        }
+        return SlotHandle::INVALID_INDEX;
     }
 
     /// 全SlotRefを無効化した後、プールを初期化する

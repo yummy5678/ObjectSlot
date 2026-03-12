@@ -181,6 +181,12 @@ public:
      */
     WeakSlotPtr<T> GetWeak() const;
 
+    /// 別のSlotPtrと内容を交換
+    void Swap(SlotPtr& other) noexcept {
+        std::swap(m_handle, other.m_handle);
+        std::swap(m_slot, other.m_slot);
+    }
+
     /**
      * @brief 参照を解放
      */
@@ -216,6 +222,19 @@ public:
     /// nullptrとの非等価比較
     bool operator!=(std::nullptr_t) const noexcept { return IsValid(); }
 
+    /// 小なり比較（コンテナのキーとして使用可能にする）
+    bool operator<(const SlotPtr& other) const { return m_handle < other.m_handle; }
+
+    /// 以下比較
+    bool operator<=(const SlotPtr& other) const { return !(other < *this); }
+
+    /// 大なり比較
+    bool operator>(const SlotPtr& other) const { return other < *this; }
+
+    /// 以上比較
+    bool operator>=(const SlotPtr& other) const { return !(*this < other); }
+
+
 private:
     void Release() {
         if (m_slot != nullptr && m_slot->IsValidHandle(m_handle)) {
@@ -232,3 +251,22 @@ bool operator==(std::nullptr_t, const SlotPtr<T>& rhs) noexcept { return rhs == 
 
 template<typename T>
 bool operator!=(std::nullptr_t, const SlotPtr<T>& rhs) noexcept { return rhs != nullptr; }
+
+/// ADL用swap関数
+template<typename T>
+void swap(SlotPtr<T>& lhs, SlotPtr<T>& rhs) noexcept { lhs.Swap(rhs); }
+
+/// std::hashの特殊化
+namespace std {
+    template<typename T>
+    struct hash<SlotPtr<T>> {
+        size_t operator()(const SlotPtr<T>& p) const {
+            return hash<SlotHandle>()(p.GetHandle());
+        }
+    };
+}
+
+
+// SlotPtr定義完了後にWeakSlotPtrをインクルード
+// WeakSlotPtr.h内の#include "SlotPtr.h"は#pragma onceで無視される
+#include "WeakSlotPtr.h"

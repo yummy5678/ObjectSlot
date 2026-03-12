@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 
 // 前方宣言
 template<typename T>
@@ -106,6 +107,23 @@ public:
             m_slot->RemoveSubscription(m_slotIndex, m_subscriptionId);
             m_slot = nullptr;
             m_valid = false;
+        }
+    }
+
+    /**
+     * @brief 購読コールバックを差し替え
+     *
+     * 購読IDはそのままに、実行される関数だけを更新する。
+     * 主にムーブ操作時、コールバック内でキャプチャした
+     * thisポインタを新しいアドレスに差し替えるために使用する。
+     *
+     * @param newCallback 新しいコールバック関数
+     */
+    void UpdateCallback(std::function<void()> newCallback)
+    {
+        if (m_valid && m_slot != nullptr)
+        {
+            m_slot->UpdateSubscriptionCallback(m_slotIndex, m_subscriptionId, std::move(newCallback));
         }
     }
 

@@ -1,12 +1,16 @@
 #pragma once
 
+#include <functional>
 #include "SlotHandle.h"
 #include "Subscription.h"
-#include <functional>
+
 
 // 前方宣言
 template<typename T>
 class SignalSlotSystemBase;
+
+template<typename T>
+class WeakSignalSlotPtr;
 
 class SlotControlBase;
 
@@ -22,7 +26,6 @@ class SlotControlBase;
  * Subscriptionの破棄で購読が自動解除される。
  *
  * 主な用途:
- * - VulkanデバイスやVMAなど、他のリソースが依存するオブジェクトの管理
  * - 解放順序の制御が必要なリソースの管理
  *
  * 基底型で持ち回したい場合はSlotRefに変換すること。
@@ -130,11 +133,22 @@ public:
         return m_slot->Get(m_handle);
     }
 
+    /// 弱参照を生成
+    WeakSignalSlotPtr<T> GetWeak() const;
+
+
     /// 要素へのポインタを取得 (const版)
     const T* Get() const {
         if (!IsValid()) return nullptr;
         return m_slot->Get(m_handle);
     }
+
+    /// 別のSignalSlotPtrと内容を交換
+    void Swap(SignalSlotPtr& other) noexcept {
+        std::swap(m_handle, other.m_handle);
+        std::swap(m_slot, other.m_slot);
+    }
+
 
     /// 参照が有効かどうかを判定
     bool IsValid() const {
@@ -189,6 +203,19 @@ public:
     /// nullptrとの非等価比較
     bool operator!=(std::nullptr_t) const noexcept { return IsValid(); }
 
+    /// 小なり比較（コンテナのキーとして使用可能にする）
+    bool operator<(const SignalSlotPtr& other) const { return m_handle < other.m_handle; }
+
+    /// 以下比較
+    bool operator<=(const SignalSlotPtr& other) const { return !(other < *this); }
+
+    /// 大なり比較
+    bool operator>(const SignalSlotPtr& other) const { return other < *this; }
+
+    /// 以上比較
+    bool operator>=(const SignalSlotPtr& other) const { return !(*this < other); }
+
+
 private:
     /// 参照を解放する内部処理
     void Release() {
@@ -208,3 +235,23 @@ bool operator==(std::nullptr_t, const SignalSlotPtr<T>& rhs) noexcept { return r
 
 template<typename T>
 bool operator!=(std::nullptr_t, const SignalSlotPtr<T>& rhs) noexcept { return rhs != nullptr; }
+
+
+/// ADL用swap関数
+template<typename T>
+void swap(SignalSlotPtr<T>& lhs, SignalSlotPtr<T>& rhs) noexcept { lhs.Swap(rhs); }
+
+/// std::hashの特殊化
+namespace std {
+    template<typename T>
+    struct hash<SignalSlotPtr<T>> {
+        size_t operator()(const SignalSlotPtr<T>& p) const {
+            return hash<SlotHandle>()(p.GetHandle());
+        }
+    };
+}
+
+
+// SignalSlotPtr定義完了後にWeakSignalSlotPtrをインクルード
+// WeakSignalSlotPtr.h内の#include "SignalSlotPtr.h"は#pragma onceで無視される
+#include "WeakSignalSlotPtr.h"

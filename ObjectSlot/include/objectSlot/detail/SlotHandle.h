@@ -31,6 +31,21 @@ struct SlotHandle {
         return !(*this == other);
     }
 
+    /// 小なり比較（コンテナのキーとして使用可能にする）
+    bool operator<(const SlotHandle& other) const {
+        if (index != other.index) return index < other.index;
+        return generation < other.generation;
+    }
+
+    /// 以下比較
+    bool operator<=(const SlotHandle& other) const { return !(other < *this); }
+
+    /// 大なり比較
+    bool operator>(const SlotHandle& other) const { return other < *this; }
+
+    /// 以上比較
+    bool operator>=(const SlotHandle& other) const { return !(*this < other); }
+
     /** 無効なインデックスを表す定数 */
     static constexpr uint32_t INVALID_INDEX = UINT32_MAX;
 
@@ -49,7 +64,8 @@ struct SlotHandle {
     static SlotHandle Invalid() {
         return { INVALID_INDEX, 0 };
     }
-};
+    
+    };
 
 /**
  * @brief std::unordered_map等でSlotHandleをキーとして使用するためのハッシュ特殊化

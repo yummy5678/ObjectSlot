@@ -1,6 +1,8 @@
 #pragma once
 
 #include "SlotControlBase.h"
+#include "EnableSlotFromThis.h"
+#include <type_traits>
 
 // 前方宣言
 template<typename T>
@@ -195,6 +197,11 @@ protected:
             m_generations.push_back(0);
             m_alive.push_back(true);
             m_refCounts.push_back(0);
+        }
+
+        // EnableSlotFromThis<T>を継承している場合、スロット情報を設定する
+        if constexpr (std::is_base_of_v<EnableSlotFromThis<T>, T>) {
+        m_data[handle.index].InitSlotFromThis(handle, this);
         }
 
         ++m_count;

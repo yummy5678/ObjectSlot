@@ -69,9 +69,18 @@ public:
         (void)slotIndex;
     }
 
-    /// SlotRefのポインタ更新用の登録を解除（RefSlotSystemBaseで実装）
-    virtual void UnregisterRef(void** ptrLocation) {
+    /// SlotRefの登録を解除し、対応するスロットインデックスを返す
+    /// 登録が見つからない場合はINVALID_INDEXを返す
+    virtual uint32_t UnregisterRef(void** ptrLocation) {
         (void)ptrLocation;
+        return SlotHandle::INVALID_INDEX;
+    }
+
+    /// ptrLocationからスロットインデックスを検索する（登録を解除しない）
+    /// SlotRefのコピー操作時に使用する
+    virtual uint32_t FindIndexByRef(const void* ptrLocation) const {
+        (void)ptrLocation;
+        return SlotHandle::INVALID_INDEX;
     }
 
     /// インデックス指定で参照カウントを増加（SlotRef用）
