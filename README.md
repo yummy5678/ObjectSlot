@@ -1,236 +1,152 @@
 # ObjectSlot
 
-C++17向けのヘッダーオンリー・オブジェクトプールライブラリです。
-参照カウント付きスマートポインタ、解放通知の購読パターン、基底型へのポリモーフィック参照を提供します。
+C++17向けのヘッダーオンリー メモリプールライブラリ。
 
-## 特徴
+オブジェクトをメモリ上に連続配置し、参照カウント方式で自動管理する。
 
-- **メモリ連続配置** — 同じ型のオブジェクトを`std::vector`で連続配置し、キャッシュ効率を高めます
-- **世代番号によるダングリング検出** — 削除済みスロットの再利用時に、古いハンドルが無効であることを自動検出します
-- **参照カウント** — `shared_ptr`のように、全ての参照が破棄されるとオブジェクトが自動的に削除されます
-- **解放通知の購読** — オブジェクトが解放される際に、登録されたコールバックを逆順に実行します
-- **ポリモーフィック参照** — 異なる具体型のオブジェクトを、基底インターフェースで統一的に管理できます
-- **ヘッダーオンリー** — `#include`するだけで使えます。ビルド設定やリンクは不要です
+共有ポインタの機能を参考にしつつ、メモリの連続配置を目標に作成した。
 
-## 導入
-
-`include/objectSlot/` ディレクトリをプロジェクトのインクルードパスに追加し、ヘッダーをインクルードしてください。
-
-```cpp
-#include <objectSlot/ObjectSlot.h>
-```
-
-## 要件
+## 必要要件
 
 - C++17以上
+- 外部依存なし
+- Windows / Linux / macOS / Emscripten 対応
 
-## 概要
+## 導入方法
 
-### プールの種類
-
-用途に応じて3種類のプールを使い分けます。
-
-| プール | 説明 | 返すポインタ型 |
-|--------|------|---------------|
-| `ObjectSlotSystem<T>` | 軽量版。通知機能なし | `SlotPtr<T>` |
-| `SignalSlotSystem<T>` | 解放通知の購読に対応 | `SignalSlotPtr<T>` |
-| `RefSlotSystem<T>` | 購読 + ポリモーフィック参照に対応 | `SignalSlotPtr<T>` |
-
-各プールはシングルトンで、`GetInstance()`でインスタンスを取得します。
-
-### ポインタの種類
-
-| ポインタ | サイズ | 説明 |
-|----------|--------|------|
-| `SlotPtr<T>` | 16B | 軽量な参照カウント付きポインタ |
-| `SignalSlotPtr<T>` | 16B | 購読機能付きの参照カウントポインタ |
-| `WeakSlotPtr<T>` | 16B | 参照カウントに影響しない弱参照 |
-| `SlotRef<T>` | 16B | 基底型へのポリモーフィック参照。Get()はゼロコスト |
-| `Subscription<T>` | — | 購読の有効期間を管理。破棄で自動解除 |
-
-## 使い方
-
-### 基本（SlotPtr）
+`include/objectSlot` フォルダをインクルードパスに追加する。
 
 ```cpp
-auto& slot = ObjectSlotSystem<Mesh>::GetInstance();
-
-// 作成
-auto mesh = slot.Create(Mesh{ "Box" });
-
-// アクセス
-mesh->Draw();
-Mesh& ref = *mesh;
-
-// コピー（参照カウント増加）
-SlotPtr<Mesh> copy = mesh;
-
-// 解放
-mesh.Reset();     // または mesh = nullptr;
+#include "objectSlot/ObjectSlot.h"
 ```
 
-### 弱参照（WeakSlotPtr）
+## 設計思想
+
+std::shared_ptrはオブジェクトをヒープ上にバラバラに配置するため、大量のオブジェクトを扱う場合にキャッシュ効率が悪い。ObjectSlotは同じ型のオブジェクトをメモリ上に連続配置し、ForEachによる一括走査を可能にする。
+
+参照カウント方式はshared_ptrと同じだが、atomic操作を行わないためシングルスレッド環境に限定される。
+
+## プール種類
+
+| プール | 通知 | SlotRef | 用途 |
+|--------|------|---------|------|
+| `ObjectSlotSystem<T>` | — | — | 軽量な要素管理 |
+| `SignalSlotSystem<T>` | ○ | — | 解放通知が必要な場合 |
+| `RefSlotSystem<T>` | ○ | ○ | 基底型で統一管理する場合 |
+
+全てシングルトンで、`GetInstance()`で取得する。
+
+## スマートポインタ
+
+| ポインタ | 参照カウント | 通知 | 用途 |
+|----------|-------------|------|------|
+| `SlotPtr<T>` | ○ | — | 基本の所有権管理 |
+| `SignalSlotPtr<T>` | ○ | ○ | 解放通知付き |
+| `WeakSlotPtr<T>` | — | — | 非所有の弱参照。Lock()で強参照に変換 |
+| `WeakSignalSlotPtr<T>` | — | ○ | 通知付き弱参照。Lock()で強参照に変換 |
+| `SlotRef<T>` | ○ | ○ | 基底型でのポリモーフィック参照 |
+
+全て16バイト。
+
+## 使用例
+
+### 基本
 
 ```cpp
-auto mesh = slot.Create(Mesh{ "Box" });
+auto& pool = ObjectSlotSystem<Mesh>::GetInstance();
+pool.Reserve(1000);
+
+SlotPtr<Mesh> mesh = pool.Create(Mesh{ "Box" });
+mesh->Draw();
+
+SlotPtr<Mesh> mesh2 = mesh;   // 参照カウント増加
+mesh = nullptr;
+mesh2 = nullptr;               // ここで自動削除
+```
+
+### 弱参照
+
+```cpp
+SlotPtr<Mesh> mesh = pool.Create(Mesh{ "Box" });
 WeakSlotPtr<Mesh> weak = mesh.GetWeak();
 
-if (!weak.IsExpired()) {
-    SlotPtr<Mesh> locked = weak.Lock();
+mesh = nullptr;
+
+if (auto locked = weak.Lock()) {
     locked->Draw();
+} else {
+    // 既に破棄済み
 }
 ```
 
-### 解放通知（SignalSlotPtr + Subscription）
-
-依存関係のあるリソースの解放順序を制御します。
-通知は登録の逆順に実行されるため、後から作られた依存リソースが先に解放されます。
+### 解放通知
 
 ```cpp
-auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
-auto device = deviceSlot.Create(Device{ "GPU" });
+auto device = devicePool.Create(Device{ "GPU" });
 
-// 購読を登録（Subscriptionを購読者側で保持する）
 Subscription<Device> sub = device.Subscribe([]() {
-    // deviceが解放される時に実行される
+    std::cout << "デバイスが解放される" << std::endl;
 });
 
-// Subscriptionが破棄されると購読は自動解除される
+device.Reset();  // → コールバック実行 → 要素削除
 ```
 
-購読者側のオブジェクトにSubscriptionをメンバとして持たせることで、購読者の寿命と購読の寿命を一致させることができます。
+### ポリモーフィック参照
 
 ```cpp
-struct Buffer {
-    Subscription<Device> deviceSubscription;
-    void Release() { /* バッファ解放処理 */ }
-};
+auto mesh = meshPool.Create(Mesh{ "Box" });
+auto sprite = spritePool.Create(Sprite{ "Player" });
 
-auto buffer = bufferSlot.Create(Buffer{});
-Buffer* pBuffer = buffer.Get();
-
-buffer->deviceSubscription = device.Subscribe([pBuffer]() {
-    pBuffer->Release();
-});
-
-// bufferが先に破棄された場合 → Subscription破棄 → 購読自動解除
-// deviceが先に破棄された場合 → コールバック実行 → バッファ解放
-```
-
-### ポリモーフィック参照（SlotRef）
-
-異なる具体型のオブジェクトを基底インターフェースで統一的に管理します。
-`SlotRef`の`Get()`はキャッシュされた生ポインタを返すだけなので、アクセスコストはゼロです。
-
-```cpp
-class IDrawable {
-public:
-    virtual ~IDrawable() = default;
-    virtual void Draw() const = 0;
-};
-
-class Mesh : public IDrawable { /* ... */ };
-class Sprite : public IDrawable { /* ... */ };
-
-auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
-auto& spriteSlot = RefSlotSystem<Sprite>::GetInstance();
-
-auto mesh = meshSlot.Create(Mesh{ "Box" });
-auto sprite = spriteSlot.Create(Sprite{ "Player" });
-
-// 異なる型を基底型のvectorで管理
 std::vector<SlotRef<IDrawable>> drawables;
 drawables.push_back(SlotRef<IDrawable>(mesh));
 drawables.push_back(SlotRef<IDrawable>(sprite));
 
 for (auto& d : drawables) {
-    d->Draw();  // ゼロコストアクセス
+    d->Draw();
 }
 ```
 
-`SlotRef`は参照カウントに参加するため、元の`SignalSlotPtr`が破棄されても`SlotRef`が生きている限りオブジェクトは維持されます。
-
-プールの再アロケーション時には、登録された全ての`SlotRef`のポインタが自動的に更新されます。
-
-### プール操作
+### エイリアシング
 
 ```cpp
-auto& slot = ObjectSlotSystem<Mesh>::GetInstance();
+auto mesh = meshPool.Create(Mesh{ "Target", 256 });
 
-slot.Reserve(100);          // メモリを事前確保
-slot.SetMaxCapacity(256);   // 最大容量を設定（0で無制限）
-
-slot.Count();               // 有効な要素数
-slot.Capacity();            // 確保済みスロット数
-
-slot.ForEach([](SlotHandle handle, Mesh& mesh) {
-    mesh.Draw();            // 全要素に処理を実行
-});
-
-slot.ShrinkToFit();         // 末尾の未使用スロットを解放
-slot.Clear();               // 全要素を削除
+// meshの所有権を共有しつつ、メンバ変数を直接参照
+SlotRef<std::string> nameRef(mesh, &mesh->name);
 ```
 
-## 継承構造
+### EnableSlotFromThis
 
-```
-SlotControlBase                  （非テンプレート基底。参照カウント管理）
-  └ ObjectSlotSystemBase<T>      （型依存データストレージ）
-      └ ObjectSlotSystem<T>      （軽量版シングルトンプール）
-      └ SignalSlotSystemBase<T>  （購読リスト管理）
-          └ SignalSlotSystem<T>  （通知付きシングルトンプール）
-          └ RefSlotSystemBase<T> （SlotRefポインタ更新管理）
-              └ RefSlotSystem<T> （全機能対応シングルトンプール）
-```
-
-## 設計上の注意
-
-### SlotRefの制約
-
-`SlotRef`によるポリモーフィック参照は単一継承のみをサポートしています。多重継承の場合、`static_cast`によるポインタオフセット調整が正しく行われない可能性があります。
-
-### SlotRefの使用にはRefSlotSystemが必要
-
-`SlotRef`はプール再アロケーション時にポインタを自動更新する仕組みに依存しています。`ObjectSlotSystem`や`SignalSlotSystem`で作成した要素を`SlotRef`に変換した場合、ポインタ更新の登録先がないため、再アロケーション後にダングリングポインタになる可能性があります。
-
-`SlotRef`を使用する型は必ず`RefSlotSystem`で管理してください。
-
-### ラムダキャプチャの注意
-
-購読コールバックでSlotPtrをキャプチャする場合、参照キャプチャ（`&`）は避けてください。
-SlotPtrのローカル変数がスコープを抜けた後にコールバックが実行されると、ダングリング参照でクラッシュします。
 ```cpp
-// 危険: SlotPtrの参照キャプチャ（スコープ外でダングリングになる）
-auto buffer = slot.Create(Buffer{});
+class Node : public EnableSlotFromThis<Node> {
+public:
+    SlotPtr<Node> GetSelf() { return SlotPtrFromThis(); }
+};
+
+auto node = pool.Create(Node{});
+auto self = node->GetSelf();
+```
+
+## 注意点
+
+**Reserve()の使用を推奨** — プール作成直後にReserve()で容量を確保すること。未指定の場合、要素追加時にデフォルト値で自動初期化される。
+
+**参照キャプチャの禁止** — 購読コールバックでSlotPtrをキャプチャする場合、参照キャプチャ（`&`）は使わないこと。値キャプチャを使用する。
+
+```cpp
+// 危険: 参照キャプチャ
 device.Subscribe([&buffer]() { buffer->Release(); });
 
-// 安全: SlotPtrの値キャプチャ（参照カウントが増加し、コールバック内でも有効）
-auto buffer = slot.Create(Buffer{});
+// 安全: 値キャプチャ
 device.Subscribe([buffer]() { buffer->Release(); });
 ```
 
-## ファイル構成
+**弱参照のLock()** — WeakSlotPtr / WeakSignalSlotPtrは要素の生存を保証しない。アクセス前にLock()で強参照に変換すること。
 
-```
-include/objectSlot/
-  ObjectSlot.h                  ← まとめヘッダー（これだけインクルードすれば全機能使える）
-  detail/
-    SlotHandle.h                ← 世代番号付きハンドル
-    SlotControlBase.h           ← 非テンプレートの参照カウント基底
-    ObjectSlotSystemBase.h      ← 型依存データストレージ基底
-    ObjectSlotSystem.h          ← 軽量版シングルトンプール
-    SlotPtr.h                   ← 軽量スマートポインタ
-    WeakSlotPtr.h               ← 弱参照ポインタ
-    SignalSlotSystemBase.h      ← 購読通知の基底
-    SignalSlotSystem.h          ← 通知付きシングルトンプール
-    SignalSlotPtr.h             ← 通知機能付きスマートポインタ
-    Subscription.h              ← 購読の有効期間管理
-    RefSlotSystemBase.h         ← SlotRefポインタ更新の基底
-    RefSlotSystem.h             ← 全機能対応シングルトンプール
-    SlotRef.h                   ← ポリモーフィック参照ポインタ
-```
+**insert / eraseの副作用** — RootVector上でのinsert/eraseは要素をシフトするため、シフト先のアドレスには以前と異なるオブジェクトが配置される。プール内部でinsert/eraseは使用しない（フリーリスト方式で管理している）が、RootVectorを直接使う場合は注意。
+
+**シングルスレッド前提** — 参照カウントはatomic操作を行わない。マルチスレッド環境で使用する場合は外部で排他制御が必要。
 
 ## ライセンス
 
-このプロジェクトはMITライセンスのもとで公開されています。
-著作権表示なしでの利用を希望する場合はMIT-0ライセンスも選択可能です。
+MIT / MIT-0 デュアルライセンス。
