@@ -174,8 +174,8 @@ public:
             return SignalSlotPtr<T>();
         }
         m_slot->AddRef(m_handle);
-        return SignalSlotPtr<T>(m_handle, m_slot);
-    }
+        T* ptr = m_slot->GetPtrByIndex(m_handle.index);
+        return SignalSlotPtr<T>(ptr, m_slot);    }
 
     /**
      * @brief 解放通知の購読を登録

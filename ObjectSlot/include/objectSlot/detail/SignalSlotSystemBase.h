@@ -218,6 +218,26 @@ protected:
         }
     }
 
+    /**
+     * @brief インデックス指定で購読を解除する（非テンプレート版）
+     *
+     * SubscriptionRefのデストラクタから呼ばれる。
+     * 既存のRemoveSubscriptionに委譲する。
+     */
+    void RemoveSubscriptionByIndex(uint32_t slotIndex, uint32_t subscriptionId) override {
+        RemoveSubscription(slotIndex, subscriptionId);
+    }
+    
+    /**
+     * @brief インデックス指定で購読コールバックを差し替える（非テンプレート版）
+     *
+     * SubscriptionRefのUpdateCallbackから呼ばれる。
+     * 既存のUpdateSubscriptionCallbackに委譲する。
+     */
+    void UpdateSubscriptionCallbackByIndex(uint32_t slotIndex, uint32_t subscriptionId, std::function<void()> callback) override {
+        UpdateSubscriptionCallback(slotIndex, subscriptionId, std::move(callback));
+    }
+
     /** 各スロットの購読リスト */
     std::vector<SlotSubscriptions> m_subscriptions;
 };

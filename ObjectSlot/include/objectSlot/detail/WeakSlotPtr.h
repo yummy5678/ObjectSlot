@@ -68,9 +68,10 @@ public:
         if (!IsValid()) {
             return SlotPtr<T>();
         }
-        // SlotPtrの構築で参照カウントは増加しないため、手動で増加
         m_slot->AddRef(m_handle);
-        return SlotPtr<T>(m_handle, m_slot);
+        // ハンドルからポインタを算出してSlotPtrに渡す
+        T* ptr = m_slot->GetPtrByIndex(m_handle.index);
+        return SlotPtr<T>(ptr, m_slot);
     }
 
     /// 弱参照をリセット
@@ -130,7 +131,9 @@ bool operator!=(std::nullptr_t, const WeakSlotPtr<T>& rhs) noexcept { return rhs
  */
 template<typename T>
 WeakSlotPtr<T> SlotPtr<T>::GetWeak() const {
-    return WeakSlotPtr<T>(m_handle, m_slot);
+    if (m_ptr == nullptr || m_slot == nullptr) return WeakSlotPtr<T>();
+    SlotHandle handle = m_slot->HandleFromIndex(GetIndex());
+    return WeakSlotPtr<T>(handle, m_slot);
 }
 
 /// ADL用swap関数

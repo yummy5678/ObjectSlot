@@ -123,7 +123,9 @@ protected:
             return SlotPtr<T>();
         }
         m_selfControl->AddRefByIndex(m_selfHandle.index);
-        return SlotPtr<T>(m_selfHandle, static_cast<ObjectSlotSystemBase<T>*>(m_selfControl));
+        auto* slot = static_cast<ObjectSlotSystemBase<T>*>(m_selfControl);
+        T* ptr = slot->GetPtrByIndex(m_selfHandle.index);
+        return SlotPtr<T>(ptr, slot);
     }
 
     /**
@@ -135,7 +137,9 @@ protected:
             return SlotPtr<T>();
         }
         m_selfControl->AddRefByIndex(m_selfHandle.index);
-        return SlotPtr<T>(m_selfHandle, static_cast<ObjectSlotSystemBase<T>*>(m_selfControl));
+        auto* slot = static_cast<ObjectSlotSystemBase<T>*>(m_selfControl);
+        T* ptr = slot->GetPtrByIndex(m_selfHandle.index);
+        return SlotPtr<T>(ptr, slot);
     }
 
     /**
@@ -153,7 +157,9 @@ protected:
             return SignalSlotPtr<T>();
         }
         m_selfControl->AddRefByIndex(m_selfHandle.index);
-        return SignalSlotPtr<T>(m_selfHandle, static_cast<SignalSlotSystemBase<T>*>(m_selfControl));
+        auto* slot = static_cast<SignalSlotSystemBase<T>*>(m_selfControl);
+        T* ptr = slot->GetPtrByIndex(m_selfHandle.index);
+        return SignalSlotPtr<T>(ptr, slot);
     }
 
     /**
@@ -165,7 +171,10 @@ protected:
             return SignalSlotPtr<T>();
         }
         m_selfControl->AddRefByIndex(m_selfHandle.index);
-        return SignalSlotPtr<T>(m_selfHandle, static_cast<SignalSlotSystemBase<T>*>(m_selfControl));
+        auto* slot = static_cast<SignalSlotSystemBase<T>*>(m_selfControl);
+        T* ptr = slot->GetPtrByIndex(m_selfHandle.index);
+        SignalSlotPtr<T> temp(ptr, slot);
+        return temp;
     }
 
     // ================================================================
@@ -203,7 +212,9 @@ protected:
         }
         // 一時的に強参照を作り、そこから弱参照に変換する
         m_selfControl->AddRefByIndex(m_selfHandle.index);
-        SignalSlotPtr<T> temp(m_selfHandle, static_cast<SignalSlotSystemBase<T>*>(m_selfControl));
+        auto* slot = static_cast<SignalSlotSystemBase<T>*>(m_selfControl);
+        T* ptr = slot->GetPtrByIndex(m_selfHandle.index);
+        SignalSlotPtr<T> temp(ptr, slot);
         WeakSignalSlotPtr<T> weak(temp);
         return weak;
         // temp破棄時にReleaseRefが呼ばれ参照カウントは元に戻る

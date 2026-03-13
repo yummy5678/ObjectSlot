@@ -4,6 +4,7 @@
 #include <vector>
 #include <queue>
 #include <cassert>
+#include <functional>
 
 /**
  * @brief 非テンプレートのプール制御基底クラス
@@ -22,7 +23,7 @@ public:
 
     /// ハンドルが有効かどうかを検証
     bool IsValidHandle(SlotHandle handle) const {
-        if (handle.index >= m_alive.size()) {
+        if (handle.index == SlotHandle::INVALID_INDEX) {
             return false;
         }
         if (!m_alive[handle.index]) {
@@ -83,6 +84,39 @@ public:
         return SlotHandle::INVALID_INDEX;
     }
 
+    /// 無効な購読IDを表す定数
+    static constexpr uint32_t INVALID_SUBSCRIPTION_ID = UINT32_MAX;
+
+    /// SlotRefの購読登録に必要な情報を返す構造体
+    struct SubscribeRefResult {
+        uint32_t slotIndex = SlotHandle::INVALID_INDEX;
+        uint32_t subscriptionId = INVALID_SUBSCRIPTION_ID;
+    };
+
+    /// SlotRefから解放通知を購読する（RefSlotSystemBaseで実装）
+    /// ptrLocationでRefEntryを特定し、購読を登録してIDを返す
+    /// 通知機能のないプールではデフォルト実装が空の結果を返す
+    virtual SubscribeRefResult SubscribeByRef(void** ptrLocation, std::function<void()> callback) {
+        (void)ptrLocation;
+        (void)callback;
+        return {};
+    }
+
+    /// インデックス指定で購読を解除する（SignalSlotSystemBaseで実装）
+    /// SubscriptionRefのデストラクタから呼ばれる
+    virtual void RemoveSubscriptionByIndex(uint32_t slotIndex, uint32_t subscriptionId) {
+        (void)slotIndex;
+        (void)subscriptionId;
+    }
+    
+    /// インデックス指定で購読コールバックを差し替える（SignalSlotSystemBaseで実装）
+    virtual void UpdateSubscriptionCallbackByIndex(uint32_t slotIndex, uint32_t subscriptionId, std::function<void()> callback) {
+        (void)slotIndex;
+        (void)subscriptionId;
+        (void)callback;
+    }
+
+
     /// インデックス指定で参照カウントを増加（SlotRef用）
     void AddRefByIndex(uint32_t index) {
         if (index < m_alive.size() && m_alive[index]) {
@@ -103,6 +137,11 @@ public:
         }
     }
 
+    /// インデックスからハンドルを構築
+    SlotHandle HandleFromIndex(uint32_t index) const {
+        return { index, m_generations[index] };
+    }
+
 protected:
     /// ハンドル指定で参照カウントを増加
     void AddRef(SlotHandle handle) {
@@ -121,11 +160,6 @@ protected:
                 RemoveInternal(handle);
             }
         }
-    }
-
-    /// インデックスからハンドルを構築
-    SlotHandle HandleFromIndex(uint32_t index) const {
-        return { index, m_generations[index] };
     }
 
     /// 要素を削除する内部処理（派生クラスで実装）

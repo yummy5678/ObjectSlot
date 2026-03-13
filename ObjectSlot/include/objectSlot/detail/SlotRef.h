@@ -2,6 +2,7 @@
 
 #include "SlotControlBase.h"
 #include "SlotPtr.h"
+#include "SubscriptionRef.h"
 #include <type_traits>
 #include <algorithm>
 #include <functional>
@@ -327,6 +328,35 @@ public:
         Release();
         m_ptr = nullptr;
         m_control = nullptr;
+    }
+
+    /**
+     * @brief 解放通知の購読を登録
+     *
+     * この要素が解放される時に実行されるコールバックを登録する。
+     * 返されるSubscriptionRefオブジェクトが破棄されると購読は自動解除される。
+     *
+     * RefSlotSystem使用時のみ動作する。
+     * ObjectSlotSystem/SignalSlotSystemではプール側に登録情報がないため、
+     * 空のSubscriptionRefが返る。
+     *
+     * @param callback 解放時に実行する関数
+     * @return 購読オブジェクト（購読者側で保持すること）
+     */
+    SubscriptionRef Subscribe(std::function<void()> callback)
+    {
+        if (m_ptr == nullptr || m_control == nullptr) {
+            return SubscriptionRef();
+        }
+    
+        auto result = m_control->SubscribeByRef(
+            reinterpret_cast<void**>(&m_ptr), std::move(callback));
+        
+        if (result.slotIndex == SlotHandle::INVALID_INDEX) {
+            return SubscriptionRef();
+        }
+    
+        return SubscriptionRef(m_control, result.slotIndex, result.subscriptionId);
     }
 
     /**

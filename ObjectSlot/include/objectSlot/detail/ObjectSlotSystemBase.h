@@ -2,6 +2,7 @@
 
 #include "SlotControlBase.h"
 #include "EnableSlotFromThis.h"
+#include "thirdparty/rootVector/RootVector.h"
 #include <type_traits>
 
 // 前方宣言
@@ -56,6 +57,19 @@ public:
             return nullptr;
         }
         return &m_data[handle.index];
+    }
+
+     /**
+     * @brief インデックスから要素への直接ポインタを取得
+     *
+     * RootVectorのアドレスは固定のため、この戻り値は生涯有効。
+     * SlotPtrの構築時にキャッシュポインタとして使用する。
+     *
+     * @param index スロットインデックス
+     * @return 要素への直接ポインタ
+     */
+    T* GetPtrByIndex(uint32_t index) {
+        return &m_data[index];
     }
 
     /**
@@ -121,18 +135,23 @@ public:
      * @param capacity 確保する要素数
      */
     void Reserve(size_t capacity) {
-        if (capacity > m_data.size()) {
-            m_data.reserve(capacity);
-            m_generations.reserve(capacity);
-            m_alive.reserve(capacity);
-            m_refCounts.reserve(capacity);
+        if (!m_data.is_initialized()) {
+            m_data.Init(capacity);
         }
+        m_data.reserve(capacity);
+
+        m_generations.reserve(capacity);
+        m_alive.reserve(capacity);
+        m_refCounts.reserve(capacity);
     }
 
     /**
      * @brief 末尾の未使用スロットを解放してメモリを縮小
      */
     void ShrinkToFit() {
+        // m_dataはshrink_to_fitでデコミット（RootVector側で対応）
+        m_data.shrink_to_fit();
+
         size_t newSize = m_data.size();
         while (newSize > 0 && !m_alive[newSize - 1]) {
             --newSize;
@@ -180,6 +199,13 @@ protected:
     SlotHandle AllocateSlot(T&& obj) {
         SlotHandle handle;
 
+        // RootVectorが未初期化なら自動初期化（デフォルト最大容量）
+        if (!m_data.is_initialized()) {
+            constexpr size_t DEFAULT_MAX_CAPACITY = 65536;
+            size_t maxCap = (m_maxCapacity > 0) ? m_maxCapacity : DEFAULT_MAX_CAPACITY;
+            m_data.Init(maxCap);
+        }
+
         if (!m_freeList.empty()) {
             handle.index = m_freeList.front();
             m_freeList.pop();
@@ -193,15 +219,14 @@ protected:
             handle.index = static_cast<uint32_t>(m_data.size());
             handle.generation = 0;
 
-            m_data.push_back(std::move(obj));
+            m_data.emplace_back(std::move(obj));
             m_generations.push_back(0);
             m_alive.push_back(true);
             m_refCounts.push_back(0);
         }
 
-        // EnableSlotFromThis<T>を継承している場合、スロット情報を設定する
         if constexpr (std::is_base_of_v<EnableSlotFromThis<T>, T>) {
-        m_data[handle.index].InitSlotFromThis(handle, this);
+            m_data[handle.index].InitSlotFromThis(handle, this);
         }
 
         ++m_count;
@@ -225,5 +250,5 @@ protected:
     }
 
     /** 要素の連続配置ストレージ */
-    std::vector<T> m_data;
+    RootVector<T> m_data;
 };

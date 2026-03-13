@@ -42,7 +42,8 @@ public:
 
         SlotHandle handle = this->AllocateSlot(std::move(obj));
         this->AddRef(handle);
-        return SlotPtr<T>(handle, this);
+        T* ptr = this->GetPtrByIndex(handle.index);
+        return SlotPtr<T>(ptr, this);
     }
 
     // コピー禁止

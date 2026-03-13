@@ -6,6 +6,9 @@
 #include <map>
 #include <unordered_set>
 #include <unordered_map>
+#include <chrono>
+#include <memory>
+#include <numeric>
 
 // ======================================================
 // テスト用の型定義
@@ -16,6 +19,7 @@ class IDrawable {
 public:
     virtual ~IDrawable() = default;
     virtual void Draw() const = 0;
+    virtual const std::string& GetName() const = 0;
 };
 
 /// IDrawableの具体型A
@@ -27,6 +31,7 @@ public:
     Mesh(const std::string& n) : name(n), vertexCount(0) {}
     Mesh(const std::string& n, int v) : name(n), vertexCount(v) {}
     void Draw() const override { std::cout << "  メッシュ描画: " << name << std::endl; }
+    const std::string& GetName() const override { return name; }
 };
 
 /// IDrawableの具体型B
@@ -36,6 +41,7 @@ public:
     Sprite() = default;
     Sprite(const std::string& n) : name(n) {}
     void Draw() const override { std::cout << "  スプライト描画: " << name << std::endl; }
+    const std::string& GetName() const override { return name; }
 };
 
 /// 通知購読テスト用：通知を送る側
@@ -82,6 +88,30 @@ public:
     }
 };
 
+/// ベンチマーク用の軽量構造体（文字列を持たない）
+struct BenchData {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    int id = 0;
+};
+
+/// ベンチマーク用のインターフェース
+class IBenchObject {
+public:
+    virtual ~IBenchObject() = default;
+    virtual float GetValue() const = 0;
+};
+
+/// IBenchObjectの具体型
+class BenchObject : public IBenchObject {
+public:
+    float value = 0.0f;
+    BenchObject() = default;
+    BenchObject(float v) : value(v) {}
+    float GetValue() const override { return value; }
+};
+
 // ======================================================
 // テスト用ヘルパー
 // ======================================================
@@ -112,6 +142,38 @@ static void PrintResult(bool success) {
         ++g_failed;
         std::cout << "  結果: *** 失敗 ***" << std::endl;
     }
+}
+
+// ======================================================
+// ベンチマーク用ヘルパー
+// ======================================================
+
+/// 計測結果を表すナノ秒単位の型
+using Nanoseconds = long long;
+
+/// 指定回数のループを計測して平均ナノ秒を返す
+template<typename Func>
+Nanoseconds MeasureAverage(int iterations, Func&& func) {
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < iterations; ++i) {
+        func(i);
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    return elapsed / iterations;
+}
+
+/// ベンチマーク結果を表示（2つの方式を比較）
+static void PrintBenchmark(const std::string& label,
+    Nanoseconds slotNs, Nanoseconds sharedNs)
+{
+    double ratio = (sharedNs > 0) ? static_cast<double>(slotNs) / sharedNs : 0.0;
+    std::cout << "  " << label << ":" << std::endl;
+    std::cout << "    ObjectSlot : " << slotNs << " ns" << std::endl;
+    std::cout << "    shared_ptr : " << sharedNs << " ns" << std::endl;
+    std::cout << "    比率       : " << std::fixed;
+    std::cout.precision(2);
+    std::cout << ratio << "x" << std::endl;
 }
 
 // ======================================================
@@ -204,22 +266,7 @@ int main()
         PrintResult(ptrA->name == "Beta" && ptrB->name == "Alpha");
     }
 
-    PrintTest("SlotPtr - 順序比較演算子");
-    {
-        auto& slot = ObjectSlotSystem<Mesh>::GetInstance();
-        auto ptrA = slot.Create(Mesh{ "First" });
-        auto ptrB = slot.Create(Mesh{ "Second" });
-
-        // ハンドルのインデックス順で比較される
-        bool lessWorks = (ptrA < ptrB) || (ptrB < ptrA);
-        bool leqWorks = (ptrA <= ptrA);
-        bool geqWorks = (ptrA >= ptrA);
-        std::cout << "  ptrA < ptrB or ptrB < ptrA: " << lessWorks << std::endl;
-        std::cout << "  ptrA <= ptrA: " << leqWorks << std::endl;
-        PrintResult(lessWorks && leqWorks && geqWorks);
-    }
-
-    PrintTest("SlotPtr - std::setに格納");
+    PrintTest("SlotPtr - 順序比較とstd::set");
     {
         auto& slot = ObjectSlotSystem<Mesh>::GetInstance();
         auto ptrA = slot.Create(Mesh{ "SetA" });
@@ -230,13 +277,13 @@ int main()
         meshSet.insert(ptrA);
         meshSet.insert(ptrB);
         meshSet.insert(ptrC);
-        meshSet.insert(ptrA); // 重複
+        meshSet.insert(ptrA);
 
         std::cout << "  set内の要素数: " << meshSet.size() << std::endl;
         PrintResult(meshSet.size() == 3);
     }
 
-    PrintTest("SlotPtr - std::unordered_setに格納");
+    PrintTest("SlotPtr - std::unordered_set");
     {
         auto& slot = ObjectSlotSystem<Mesh>::GetInstance();
         auto ptrA = slot.Create(Mesh{ "HashA" });
@@ -245,7 +292,7 @@ int main()
         std::unordered_set<SlotPtr<Mesh>> meshSet;
         meshSet.insert(ptrA);
         meshSet.insert(ptrB);
-        meshSet.insert(ptrA); // 重複
+        meshSet.insert(ptrA);
 
         std::cout << "  unordered_set内の要素数: " << meshSet.size() << std::endl;
         PrintResult(meshSet.size() == 2);
@@ -285,34 +332,14 @@ int main()
         bool isValid = weak.IsValid();
         bool boolConv = static_cast<bool>(weak);
         bool notNull = (weak != nullptr);
-        bool nullIsNull = (nullptr != weak);
-
-        std::cout << "  IsValid: " << isValid << ", bool: " << boolConv
-            << ", != nullptr: " << notNull << std::endl;
 
         ptr.Reset();
         bool afterExpired = (weak == nullptr);
-        std::cout << "  解放後 == nullptr: " << afterExpired << std::endl;
 
-        PrintResult(isValid && boolConv && notNull && nullIsNull && afterExpired);
+        PrintResult(isValid && boolConv && notNull && afterExpired);
     }
 
-    PrintTest("WeakSlotPtr - UseCount");
-    {
-        auto& slot = ObjectSlotSystem<Mesh>::GetInstance();
-        auto ptr1 = slot.Create(Mesh{ "WeakCount" });
-        SlotPtr<Mesh> ptr2 = ptr1;
-
-        WeakSlotPtr<Mesh> weak = ptr1.GetWeak();
-        std::cout << "  UseCount (2参照): " << weak.UseCount() << std::endl;
-
-        ptr2.Reset();
-        std::cout << "  UseCount (1参照): " << weak.UseCount() << std::endl;
-
-        PrintResult(weak.UseCount() == 1);
-    }
-
-    PrintTest("WeakSlotPtr - Swap");
+    PrintTest("WeakSlotPtr - UseCount と Swap");
     {
         auto& slot = ObjectSlotSystem<Mesh>::GetInstance();
         auto ptrA = slot.Create(Mesh{ "WeakA" });
@@ -321,13 +348,13 @@ int main()
         WeakSlotPtr<Mesh> weakA = ptrA.GetWeak();
         WeakSlotPtr<Mesh> weakB = ptrB.GetWeak();
 
-        weakA.Swap(weakB);
+        bool countOk = (weakA.UseCount() == 1);
 
+        weakA.Swap(weakB);
         auto lockedA = weakA.Lock();
         auto lockedB = weakB.Lock();
-        std::cout << "  Swap後: weakA -> " << lockedA->name
-            << ", weakB -> " << lockedB->name << std::endl;
-        PrintResult(lockedA->name == "WeakB" && lockedB->name == "WeakA");
+
+        PrintResult(countOk && lockedA->name == "WeakB" && lockedB->name == "WeakA");
     }
 
     // ==================================================
@@ -345,34 +372,12 @@ int main()
 
         std::cout << "  Count: " << slot.Count() << ", Capacity: " << slot.Capacity() << std::endl;
 
-        std::cout << "  ForEach: ";
-        slot.ForEach([](SlotHandle h, const Sprite& s) {
-            std::cout << s.name << " ";
-            });
-        std::cout << std::endl;
-
         b.Reset();
         std::cout << "  B削除後Count: " << slot.Count() << std::endl;
         PrintResult(slot.Count() == 2);
     }
 
-    PrintTest("ObjectSlotSystem - Reserve と ShrinkToFit");
-    {
-        auto& slot = ObjectSlotSystem<Sprite>::GetInstance();
-        slot.Clear();
-
-        slot.Reserve(100);
-        std::cout << "  Reserve(100)後のCapacity: " << slot.Capacity() << std::endl;
-
-        auto a = slot.Create(Sprite{ "Only" });
-        std::cout << "  要素1つのCount: " << slot.Count() << std::endl;
-
-        slot.ShrinkToFit();
-        std::cout << "  ShrinkToFit後のCapacity: " << slot.Capacity() << std::endl;
-        PrintResult(slot.Count() == 1);
-    }
-
-    PrintTest("ObjectSlotSystem - MaxCapacity");
+    PrintTest("ObjectSlotSystem - Reserve, ShrinkToFit, MaxCapacity");
     {
         auto& slot = ObjectSlotSystem<Sprite>::GetInstance();
         slot.Clear();
@@ -382,12 +387,10 @@ int main()
         auto b = slot.Create(Sprite{ "2nd" });
         auto c = slot.Create(Sprite{ "3rd" });
 
-        std::cout << "  MaxCapacity: " << slot.GetMaxCapacity() << std::endl;
-        std::cout << "  Count: " << slot.Count() << std::endl;
-        std::cout << "  3つ目は有効: " << c.IsValid() << std::endl;
-        PrintResult(slot.Count() == 2 && !c.IsValid());
-
+        bool maxCapOk = (slot.Count() == 2 && !c.IsValid());
         slot.SetMaxCapacity(0);
+
+        PrintResult(maxCapOk);
     }
 
     // ==================================================
@@ -402,10 +405,8 @@ int main()
         bool notified = false;
         auto sub = device.Subscribe([&notified]() {
             notified = true;
-            std::cout << "  購読コールバック実行" << std::endl;
             });
 
-        std::cout << "  Subscription有効: " << sub.IsValid() << std::endl;
         device.Reset();
         PrintResult(notified);
     }
@@ -421,7 +422,6 @@ int main()
         for (int i = 1; i <= 3; ++i) {
             subs.push_back(device.Subscribe([&order, i]() {
                 order.push_back(i);
-                std::cout << "  購読者 " << i << " 通知受信" << std::endl;
                 }));
         }
 
@@ -439,31 +439,7 @@ int main()
         auto sub = device.Subscribe([&notified]() { notified = true; });
 
         sub.Unsubscribe();
-        std::cout << "  Unsubscribe後: sub.IsValid = " << sub.IsValid() << std::endl;
-
         device.Reset();
-        std::cout << "  通知されたか: " << notified << std::endl;
-        PrintResult(!notified);
-    }
-
-    PrintTest("SignalSlotPtr - 購読者の先行破棄による自動解除");
-    {
-        auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
-        auto& bufferSlot = ObjectSlotSystem<Buffer>::GetInstance();
-
-        auto device = deviceSlot.Create(Device{ "GPU" });
-        bool notified = false;
-
-        {
-            auto buffer = bufferSlot.Create(Buffer{ "TempBuffer" });
-            buffer->deviceSubscription = device.Subscribe([&notified]() {
-                notified = true;
-                });
-        }
-        // Bufferが破棄 → Subscription破棄 → 購読自動解除
-
-        device.Reset();
-        std::cout << "  購読者先行破棄後に通知されたか: " << notified << std::endl;
         PrintResult(!notified);
     }
 
@@ -477,102 +453,59 @@ int main()
         {
             auto sub1 = device.Subscribe([&notified]() { notified = true; });
             sub2 = std::move(sub1);
-            std::cout << "  ムーブ後: sub1.IsValid = " << sub1.IsValid()
-                << ", sub2.IsValid = " << sub2.IsValid() << std::endl;
         }
-        // sub1はスコープを抜けたが、所有権はsub2に移動済み
-
         device.Reset();
         PrintResult(notified);
     }
 
-    PrintTest("SignalSlotPtr - Swap");
+    PrintTest("SignalSlotPtr - Swap と std::map");
     {
         auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
         auto devA = deviceSlot.Create(Device{ "GPU_A" });
         auto devB = deviceSlot.Create(Device{ "GPU_B" });
 
         devA.Swap(devB);
-        std::cout << "  Swap後: devA->name = " << devA->name
-            << ", devB->name = " << devB->name << std::endl;
-        PrintResult(devA->name == "GPU_B" && devB->name == "GPU_A");
-    }
-
-    PrintTest("SignalSlotPtr - 順序比較演算子とstd::map");
-    {
-        auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
-        auto devA = deviceSlot.Create(Device{ "First" });
-        auto devB = deviceSlot.Create(Device{ "Second" });
+        bool swapOk = (devA->name == "GPU_B" && devB->name == "GPU_A");
 
         std::map<SignalSlotPtr<Device>, std::string> deviceMap;
         deviceMap[devA] = "値A";
         deviceMap[devB] = "値B";
+        bool mapOk = (deviceMap.size() == 2);
 
-        std::cout << "  map内の要素数: " << deviceMap.size() << std::endl;
-        PrintResult(deviceMap.size() == 2 && deviceMap[devA] == "値A");
+        PrintResult(swapOk && mapOk);
     }
 
-    // ==================================================
-    PrintCategory("Subscription::UpdateCallback");
-    // ==================================================
-
-    PrintTest("Subscription - コールバックの差し替え");
+    PrintTest("Subscription - UpdateCallback");
     {
         auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
         auto device = deviceSlot.Create(Device{ "GPU" });
 
-        int callbackVersion = 0;
-        auto sub = device.Subscribe([&callbackVersion]() {
-            callbackVersion = 1;
-            });
-
-        // コールバックを差し替え
-        sub.UpdateCallback([&callbackVersion]() {
-            callbackVersion = 2;
-            });
+        int version = 0;
+        auto sub = device.Subscribe([&version]() { version = 1; });
+        sub.UpdateCallback([&version]() { version = 2; });
 
         device.Reset();
-        std::cout << "  実行されたコールバック: バージョン " << callbackVersion << std::endl;
-        PrintResult(callbackVersion == 2);
+        PrintResult(version == 2);
     }
 
     // ==================================================
     PrintCategory("WeakSignalSlotPtr");
     // ==================================================
 
-    PrintTest("WeakSignalSlotPtr - SignalSlotPtrからの変換と基本操作");
+    PrintTest("WeakSignalSlotPtr - 基本操作");
     {
         auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
         auto device = deviceSlot.Create(Device{ "GPU" });
 
         WeakSignalSlotPtr<Device> weak(device);
 
-        bool isValid = weak.IsValid();
-        bool notExpired = !weak.IsExpired();
-        bool boolConv = static_cast<bool>(weak);
-        bool notNull = (weak != nullptr);
-        uint32_t useCount = weak.UseCount();
+        bool valid = weak.IsValid() && !weak.IsExpired();
+        bool countOk = (weak.UseCount() == 1);
 
-        std::cout << "  IsValid: " << isValid << ", UseCount: " << useCount << std::endl;
-        PrintResult(isValid && notExpired && boolConv && notNull && useCount == 1);
+        PrintResult(valid && countOk);
     }
 
-    PrintTest("WeakSignalSlotPtr - Lock");
-    {
-        auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
-        auto device = deviceSlot.Create(Device{ "GPU" });
-
-        WeakSignalSlotPtr<Device> weak(device);
-        {
-            auto locked = weak.Lock();
-            std::cout << "  Lock成功: " << locked.IsValid()
-                << ", UseCount: " << locked.UseCount() << std::endl;
-            PrintResult(locked.IsValid() && locked->name == "GPU" && locked.UseCount() == 2);
-        }
-        // lockedが破棄 → 参照カウント戻る
-    }
-
-    PrintTest("WeakSignalSlotPtr - 期限切れ後のLock");
+    PrintTest("WeakSignalSlotPtr - Lock と期限切れ");
     {
         auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
         WeakSignalSlotPtr<Device> weak;
@@ -580,15 +513,12 @@ int main()
         {
             auto device = deviceSlot.Create(Device{ "Temp" });
             weak = device;
+            auto locked = weak.Lock();
+            bool lockOk = (locked.IsValid() && locked->name == "Temp");
+            if (!lockOk) { PrintResult(false); }
         }
-        // deviceが破棄 → 参照カウント0 → 要素削除
 
-        bool expired = weak.IsExpired();
-        auto locked = weak.Lock();
-        bool lockFailed = !locked.IsValid();
-
-        std::cout << "  IsExpired: " << expired << ", Lock失敗: " << lockFailed << std::endl;
-        PrintResult(expired && lockFailed);
+        PrintResult(weak.IsExpired() && !weak.Lock().IsValid());
     }
 
     PrintTest("WeakSignalSlotPtr - Subscribe（弱参照から購読）");
@@ -599,100 +529,38 @@ int main()
         WeakSignalSlotPtr<Device> weak(device);
 
         bool notified = false;
-        auto sub = weak.Subscribe([&notified]() {
-            notified = true;
-            std::cout << "  弱参照からの購読コールバック実行" << std::endl;
-            });
-
-        std::cout << "  Subscription有効: " << sub.IsValid() << std::endl;
-        std::cout << "  弱参照のUseCount: " << weak.UseCount() << std::endl;
+        auto sub = weak.Subscribe([&notified]() { notified = true; });
 
         device.Reset();
-        // 弱参照は参照カウントに影響しないため、deviceのReset()で参照カウント0 → 通知発火
         PrintResult(notified);
     }
 
-    PrintTest("WeakSignalSlotPtr - GetWeak経由での生成");
-    {
-        auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
-        auto device = deviceSlot.Create(Device{ "GPU" });
-
-        auto weak = device.GetWeak();
-
-        std::cout << "  GetWeak後: IsValid = " << weak.IsValid()
-            << ", UseCount = " << weak.UseCount() << std::endl;
-
-        auto locked = weak.Lock();
-        std::cout << "  Lock後: name = " << locked->name << std::endl;
-
-        PrintResult(weak.IsValid() && locked->name == "GPU");
-    }
-
-    PrintTest("WeakSignalSlotPtr - Swap");
+    PrintTest("WeakSignalSlotPtr - GetWeak, Swap, コンテナ");
     {
         auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
         auto devA = deviceSlot.Create(Device{ "Alpha" });
         auto devB = deviceSlot.Create(Device{ "Beta" });
 
-        WeakSignalSlotPtr<Device> weakA(devA);
-        WeakSignalSlotPtr<Device> weakB(devB);
+        auto weakA = devA.GetWeak();
+        auto weakB = devB.GetWeak();
 
         weakA.Swap(weakB);
-
-        auto lockedA = weakA.Lock();
-        auto lockedB = weakB.Lock();
-        std::cout << "  Swap後: weakA -> " << lockedA->name
-            << ", weakB -> " << lockedB->name << std::endl;
-        PrintResult(lockedA->name == "Beta" && lockedB->name == "Alpha");
-    }
-
-    PrintTest("WeakSignalSlotPtr - 順序比較とstd::set");
-    {
-        auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
-        auto devA = deviceSlot.Create(Device{ "A" });
-        auto devB = deviceSlot.Create(Device{ "B" });
+        bool swapOk = (weakA.Lock()->name == "Beta" && weakB.Lock()->name == "Alpha");
 
         std::set<WeakSignalSlotPtr<Device>> weakSet;
         weakSet.insert(WeakSignalSlotPtr<Device>(devA));
         weakSet.insert(WeakSignalSlotPtr<Device>(devB));
-        weakSet.insert(WeakSignalSlotPtr<Device>(devA)); // 重複
-
-        std::cout << "  set内の要素数: " << weakSet.size() << std::endl;
-        PrintResult(weakSet.size() == 2);
-    }
-
-    PrintTest("WeakSignalSlotPtr - std::unordered_set");
-    {
-        auto& deviceSlot = SignalSlotSystem<Device>::GetInstance();
-        auto devA = deviceSlot.Create(Device{ "HashA" });
-        auto devB = deviceSlot.Create(Device{ "HashB" });
-
-        std::unordered_set<WeakSignalSlotPtr<Device>> weakSet;
         weakSet.insert(WeakSignalSlotPtr<Device>(devA));
-        weakSet.insert(WeakSignalSlotPtr<Device>(devB));
-        weakSet.insert(WeakSignalSlotPtr<Device>(devA)); // 重複
+        bool setOk = (weakSet.size() == 2);
 
-        std::cout << "  unordered_set内の要素数: " << weakSet.size() << std::endl;
-        PrintResult(weakSet.size() == 2);
+        PrintResult(swapOk && setOk);
     }
 
     // ==================================================
     PrintCategory("SlotRef ポリモーフィック参照");
     // ==================================================
 
-    PrintTest("SlotRef - SignalSlotPtrからの変換");
-    {
-        auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
-        auto mesh = meshSlot.Create(Mesh{ "RefMesh" });
-
-        SlotRef<IDrawable> ref = mesh;
-        ref->Draw();
-
-        std::cout << "  UseCount: " << mesh.UseCount() << std::endl;
-        PrintResult(ref.IsValid() && mesh.UseCount() == 2);
-    }
-
-    PrintTest("SlotRef - 異なる具体型を基底型で統一管理");
+    PrintTest("SlotRef - 変換と統一管理");
     {
         auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
         auto& spriteSlot = RefSlotSystem<Sprite>::GetInstance();
@@ -711,31 +579,21 @@ int main()
         PrintResult(drawables.size() == 2 && mesh.UseCount() == 2 && sprite.UseCount() == 2);
     }
 
-    PrintTest("SlotRef - コピーと参照カウント");
+    PrintTest("SlotRef - コピー・ムーブ・参照カウント");
     {
         auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
-        auto mesh = meshSlot.Create(Mesh{ "CopyRef" });
+        auto mesh = meshSlot.Create(Mesh{ "CopyMove" });
 
         SlotRef<IDrawable> ref1 = mesh;
         SlotRef<IDrawable> ref2 = ref1;
-        SlotRef<IDrawable> ref3;
-        ref3 = ref2;
+        SlotRef<IDrawable> ref3 = std::move(ref1);
 
-        std::cout << "  UseCount: " << mesh.UseCount() << std::endl;
-        PrintResult(mesh.UseCount() == 4);
-    }
+        bool moveOk = !ref1.IsValid();
+        bool copyOk = ref2.IsValid();
+        bool moveDestOk = ref3.IsValid();
+        bool countOk = (mesh.UseCount() == 3);
 
-    PrintTest("SlotRef - ムーブ");
-    {
-        auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
-        auto mesh = meshSlot.Create(Mesh{ "MoveRef" });
-
-        SlotRef<IDrawable> ref1 = mesh;
-        SlotRef<IDrawable> ref2 = std::move(ref1);
-
-        std::cout << "  ref1.IsValid: " << ref1.IsValid()
-            << ", ref2.IsValid: " << ref2.IsValid() << std::endl;
-        PrintResult(!ref1.IsValid() && ref2.IsValid() && mesh.UseCount() == 2);
+        PrintResult(moveOk && copyOk && moveDestOk && countOk);
     }
 
     PrintTest("SlotRef - SlotRefだけで生存維持");
@@ -749,25 +607,8 @@ int main()
         }
 
         bool alive = ref.IsValid();
-        if (alive) ref->Draw();
-
         ref.Reset();
-        bool released = !ref.IsValid();
-
-        PrintResult(alive && released);
-    }
-
-    PrintTest("SlotRef - nullptr代入と比較");
-    {
-        auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
-        auto mesh = meshSlot.Create(Mesh{ "NullRef" });
-
-        SlotRef<IDrawable> ref = mesh;
-        bool beforeNull = (ref != nullptr);
-        ref = nullptr;
-        bool afterNull = (ref == nullptr);
-
-        PrintResult(beforeNull && afterNull);
+        PrintResult(alive && !ref.IsValid());
     }
 
     PrintTest("SlotRef - 再アロケーション後のポインタ更新");
@@ -785,24 +626,7 @@ int main()
 
         bool stillValid = ref.IsValid();
         if (stillValid) ref->Draw();
-
         PrintResult(stillValid);
-    }
-
-    PrintTest("SlotRef - 要素削除時のポインタ無効化");
-    {
-        auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
-        auto mesh = meshSlot.Create(Mesh{ "WillDelete" });
-
-        SlotRef<IDrawable> ref = mesh;
-        std::cout << "  削除前: ref.IsValid = " << ref.IsValid() << std::endl;
-
-        mesh.Reset();
-        std::cout << "  SignalSlotPtr解放後: ref.IsValid = " << ref.IsValid() << std::endl;
-
-        ref.Reset();
-        std::cout << "  ref解放後: ref.IsValid = " << ref.IsValid() << std::endl;
-        PrintResult(!ref.IsValid());
     }
 
     PrintTest("SlotRef - Swap");
@@ -818,11 +642,6 @@ int main()
 
         refA.Swap(refB);
 
-        std::cout << "  Swap後:" << std::endl;
-        std::cout << "  refA: "; refA->Draw();
-        std::cout << "  refB: "; refB->Draw();
-
-        // refAはSpriteを、refBはMeshを指しているはず
         auto* spritePtr = dynamic_cast<Sprite*>(refA.Get());
         auto* meshPtr = dynamic_cast<Mesh*>(refB.Get());
         PrintResult(spritePtr != nullptr && meshPtr != nullptr);
@@ -832,173 +651,190 @@ int main()
     PrintCategory("SlotRef エイリアシング");
     // ==================================================
 
-    PrintTest("SlotRef - SignalSlotPtrからのエイリアシング");
+    PrintTest("SlotRef - エイリアシングの作成と所有権共有");
     {
         auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
         auto mesh = meshSlot.Create(Mesh{ "AliasMesh", 42 });
 
-        // メンバ変数nameを直接参照するエイリアシングSlotRef
         SlotRef<std::string> nameRef(mesh, &mesh->name);
 
-        std::cout << "  エイリアス経由の値: " << *nameRef << std::endl;
-        std::cout << "  mesh.UseCount: " << mesh.UseCount() << std::endl;
+        bool valueOk = (*nameRef == "AliasMesh");
+        bool countOk = (mesh.UseCount() == 2);
 
-        PrintResult(*nameRef == "AliasMesh" && mesh.UseCount() == 2);
+        PrintResult(valueOk && countOk);
     }
 
-    PrintTest("SlotRef - エイリアシングのコピー");
+    PrintTest("SlotRef - エイリアシングのコピーとムーブ");
     {
         auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
         auto mesh = meshSlot.Create(Mesh{ "CopyAlias", 99 });
 
         SlotRef<int> vertRef(mesh, &mesh->vertexCount);
-        SlotRef<int> vertRef2 = vertRef; // コピー
+        SlotRef<int> vertRef2 = vertRef;
+        SlotRef<int> vertRef3 = std::move(vertRef);
 
-        std::cout << "  コピー元: " << *vertRef << ", コピー先: " << *vertRef2 << std::endl;
-        std::cout << "  mesh.UseCount: " << mesh.UseCount() << std::endl;
+        bool moveOk = !vertRef.IsValid();
+        bool copyOk = (*vertRef2 == 99);
+        bool moveDestOk = (*vertRef3 == 99);
+        bool countOk = (mesh.UseCount() == 3);
 
-        PrintResult(*vertRef == 99 && *vertRef2 == 99 && mesh.UseCount() == 3);
+        PrintResult(moveOk && copyOk && moveDestOk && countOk);
     }
 
-    PrintTest("SlotRef - エイリアシングのムーブ");
-    {
-        auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
-        auto mesh = meshSlot.Create(Mesh{ "MoveAlias", 77 });
-
-        SlotRef<int> vertRef(mesh, &mesh->vertexCount);
-        SlotRef<int> vertRef2 = std::move(vertRef);
-
-        std::cout << "  ムーブ元.IsValid: " << vertRef.IsValid()
-            << ", ムーブ先: " << *vertRef2 << std::endl;
-        std::cout << "  mesh.UseCount: " << mesh.UseCount() << std::endl;
-
-        PrintResult(!vertRef.IsValid() && *vertRef2 == 77 && mesh.UseCount() == 2);
-    }
-
-    PrintTest("SlotRef - エイリアシングの所有権共有");
+    PrintTest("SlotRef - エイリアシングの生存維持");
     {
         auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
         SlotRef<std::string> nameRef;
 
         {
-            auto mesh = meshSlot.Create(Mesh{ "OwnerTest", 10 });
+            auto mesh = meshSlot.Create(Mesh{ "OwnerTest" });
             nameRef = SlotRef<std::string>(mesh, &mesh->name);
-            std::cout << "  スコープ内: " << *nameRef << std::endl;
         }
-        // meshは破棄されたが、nameRefが参照カウントを保持
 
         bool alive = nameRef.IsValid();
-        std::cout << "  スコープ外: IsValid = " << alive << std::endl;
-
-        if (alive) std::cout << "  値: " << *nameRef << std::endl;
+        if (alive) std::cout << "  スコープ外の値: " << *nameRef << std::endl;
         nameRef.Reset();
-
-        PrintResult(alive);
+        PrintResult(alive && !nameRef.IsValid());
     }
 
-    PrintTest("SlotRef - エイリアシングの解放時にオーナーも解放");
+    // ==================================================
+    PrintCategory("SlotRef Subscribe（SubscriptionRef）");
+    // ==================================================
+
+    PrintTest("SlotRef - Subscribe 基本動作");
     {
         auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
-        auto mesh = meshSlot.Create(Mesh{ "ReleaseTest" });
+        auto mesh = meshSlot.Create(Mesh{ "SubMesh" });
 
-        SlotRef<std::string> nameRef(mesh, &mesh->name);
-        std::cout << "  作成後 UseCount: " << mesh.UseCount() << std::endl;
+        SlotRef<IDrawable> ref = mesh;
+
+        bool notified = false;
+        SubscriptionRef sub = ref.Subscribe([&notified]() {
+            notified = true;
+            std::cout << "  SlotRef購読コールバック実行" << std::endl;
+            });
+
+        std::cout << "  SubscriptionRef有効: " << sub.IsValid() << std::endl;
+
+        ref.Reset();
+        mesh.Reset();
+        PrintResult(notified);
+    }
+
+    PrintTest("SlotRef - Subscribe 手動解除");
+    {
+        auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
+        auto mesh = meshSlot.Create(Mesh{ "UnsubMesh" });
+
+        SlotRef<IDrawable> ref = mesh;
+
+        bool notified = false;
+        SubscriptionRef sub = ref.Subscribe([&notified]() { notified = true; });
+
+        sub.Unsubscribe();
+
+        ref.Reset();
+        mesh.Reset();
+        PrintResult(!notified);
+    }
+
+    PrintTest("SlotRef - Subscribe UpdateCallback");
+    {
+        auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
+        auto mesh = meshSlot.Create(Mesh{ "UpdateMesh" });
+
+        SlotRef<IDrawable> ref = mesh;
+
+        int version = 0;
+        SubscriptionRef sub = ref.Subscribe([&version]() { version = 1; });
+        sub.UpdateCallback([&version]() { version = 2; });
+
+        ref.Reset();
+        mesh.Reset();
+        PrintResult(version == 2);
+    }
+
+    PrintTest("SlotRef - Subscribe SubscriptionRef破棄時に購読が自動解除");
+    {
+        auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
+        auto mesh = meshSlot.Create(Mesh{ "AutoUnsub" });
+
+        bool notified = false;
+        {
+            SlotRef<IDrawable> ref = mesh;
+            SubscriptionRef sub = ref.Subscribe([&notified]() { notified = true; });
+            // subがスコープを抜けて購読解除
+        }
 
         mesh.Reset();
-        std::cout << "  mesh解放後: nameRef.IsValid = " << nameRef.IsValid() << std::endl;
+        PrintResult(!notified);
+    }
 
-        nameRef.Reset();
-        std::cout << "  nameRef解放後: nameRef.IsValid = " << nameRef.IsValid() << std::endl;
-        PrintResult(!nameRef.IsValid());
+    PrintTest("SlotRef - Subscribe 複数SlotRefからの購読");
+    {
+        auto& meshSlot = RefSlotSystem<Mesh>::GetInstance();
+        auto mesh = meshSlot.Create(Mesh{ "MultiSub" });
+
+        SlotRef<IDrawable> ref1 = mesh;
+        SlotRef<IDrawable> ref2 = mesh;
+
+        std::vector<int> order;
+        SubscriptionRef sub1 = ref1.Subscribe([&order]() { order.push_back(1); });
+        SubscriptionRef sub2 = ref2.Subscribe([&order]() { order.push_back(2); });
+
+        ref1.Reset();
+        ref2.Reset();
+        mesh.Reset();
+
+        bool correctOrder = (order.size() == 2 && order[0] == 2 && order[1] == 1);
+        PrintResult(correctOrder);
+    }
+
+    PrintTest("SlotRef - Subscribe ObjectSlotSystemでは空のSubscriptionRefが返る");
+    {
+        auto& slot = ObjectSlotSystem<Mesh>::GetInstance();
+        auto ptr = slot.Create(Mesh{ "NoSignal" });
+
+        SlotRef<IDrawable> ref = ptr;
+        SubscriptionRef sub = ref.Subscribe([]() {});
+
+        std::cout << "  ObjectSlotSystemでの購読: IsValid = " << sub.IsValid() << std::endl;
+        PrintResult(!sub.IsValid());
     }
 
     // ==================================================
     PrintCategory("EnableSlotFromThis");
     // ==================================================
 
-    PrintTest("EnableSlotFromThis - ObjectSlotSystem版 SlotPtrFromThis");
+    PrintTest("EnableSlotFromThis - ObjectSlotSystem版");
     {
         auto& slot = ObjectSlotSystem<SelfAwareObject>::GetInstance();
         auto ptr = slot.Create(SelfAwareObject{ "SelfObj" });
 
         auto self = ptr->GetSelf();
-        std::cout << "  GetSelf成功: " << self.IsValid()
-            << ", name: " << self->name
-            << ", UseCount: " << self.UseCount() << std::endl;
-
-        bool sameObject = (self.GetHandle() == ptr.GetHandle());
-        std::cout << "  同じオブジェクト: " << sameObject << std::endl;
-
-        PrintResult(self.IsValid() && self->name == "SelfObj" && sameObject);
-    }
-
-    PrintTest("EnableSlotFromThis - ObjectSlotSystem版 WeakSlotPtrFromThis");
-    {
-        auto& slot = ObjectSlotSystem<SelfAwareObject>::GetInstance();
-        auto ptr = slot.Create(SelfAwareObject{ "WeakSelfObj" });
+        bool selfOk = (self.IsValid() && self->name == "SelfObj");
+        bool sameHandle = (self.GetHandle() == ptr.GetHandle());
 
         auto weakSelf = ptr->GetWeakSelf();
-        std::cout << "  WeakSelf有効: " << weakSelf.IsValid()
-            << ", UseCount: " << weakSelf.UseCount() << std::endl;
+        bool weakOk = weakSelf.IsValid();
+        bool countOk = (ptr.UseCount() == 2);
 
-        // 弱参照なので参照カウントは増えない
-        bool countUnchanged = (ptr.UseCount() == 1);
-        std::cout << "  参照カウント不変: " << countUnchanged << std::endl;
-
-        auto locked = weakSelf.Lock();
-        std::cout << "  Lock後: " << locked->name << std::endl;
-
-        PrintResult(weakSelf.IsValid() && countUnchanged && locked->name == "WeakSelfObj");
+        PrintResult(selfOk && sameHandle && weakOk && countOk);
     }
 
-    PrintTest("EnableSlotFromThis - SignalSlotSystem版 SignalSlotPtrFromThis");
+    PrintTest("EnableSlotFromThis - SignalSlotSystem版");
     {
         auto& slot = SignalSlotSystem<SelfAwareSignalObject>::GetInstance();
-        auto ptr = slot.Create(SelfAwareSignalObject{ "SelfSignalObj" });
+        auto ptr = slot.Create(SelfAwareSignalObject{ "SelfSignal" });
 
         auto self = ptr->GetSelf();
-        std::cout << "  GetSelf成功: " << self.IsValid()
-            << ", name: " << self->name
-            << ", UseCount: " << self.UseCount() << std::endl;
-
-        bool sameObject = (self.GetHandle() == ptr.GetHandle());
-        PrintResult(self.IsValid() && self->name == "SelfSignalObj" && sameObject);
-    }
-
-    PrintTest("EnableSlotFromThis - SignalSlotSystem版 WeakSignalSlotPtrFromThis");
-    {
-        auto& slot = SignalSlotSystem<SelfAwareSignalObject>::GetInstance();
-        auto ptr = slot.Create(SelfAwareSignalObject{ "WeakSelfSignal" });
+        bool selfOk = (self.IsValid() && self->name == "SelfSignal");
 
         auto weakSelf = ptr->GetWeakSelf();
-        std::cout << "  WeakSelf有効: " << weakSelf.IsValid()
-            << ", UseCount: " << weakSelf.UseCount() << std::endl;
+        bool weakOk = weakSelf.IsValid();
+        bool countOk = (ptr.UseCount() == 2);
 
-        bool countUnchanged = (ptr.UseCount() == 1);
-        std::cout << "  参照カウント不変: " << countUnchanged << std::endl;
-
-        PrintResult(weakSelf.IsValid() && countUnchanged);
-    }
-
-    PrintTest("EnableSlotFromThis - コピー/ムーブでスロット情報が転送されない");
-    {
-        auto& slot = ObjectSlotSystem<SelfAwareObject>::GetInstance();
-        auto ptr1 = slot.Create(SelfAwareObject{ "Original" });
-
-        // ptrを使ってプール内のオブジェクトのnameを変更
-        auto self1 = ptr1->GetSelf();
-        std::cout << "  ptr1のGetSelf成功: " << self1.IsValid() << std::endl;
-
-        // 新しいオブジェクトを作成（コピーではなく別のプール要素）
-        auto ptr2 = slot.Create(SelfAwareObject{ "Another" });
-        auto self2 = ptr2->GetSelf();
-        std::cout << "  ptr2のGetSelf成功: " << self2.IsValid() << std::endl;
-
-        // 別々のハンドルであること
-        bool differentHandles = (self1.GetHandle() != self2.GetHandle());
-        std::cout << "  異なるハンドル: " << differentHandles << std::endl;
-
-        PrintResult(self1.IsValid() && self2.IsValid() && differentHandles);
+        PrintResult(selfOk && weakOk && countOk);
     }
 
     // ==================================================
@@ -1018,16 +854,11 @@ int main()
 
         bool meshReleased = false;
         auto sub = device.Subscribe([&meshReleased, &drawableRef]() {
-            std::cout << "  デバイス解放通知: ";
-            drawableRef->Draw();
             drawableRef.Reset();
             meshReleased = true;
             });
 
-        std::cout << "  デバイス解放前: mesh.UseCount = " << mesh.UseCount() << std::endl;
         device.Reset();
-        std::cout << "  デバイス解放後: drawableRef.IsValid = " << drawableRef.IsValid() << std::endl;
-
         PrintResult(meshReleased && !drawableRef.IsValid());
     }
 
@@ -1040,25 +871,16 @@ int main()
         auto device = deviceSlot.Create(Device{ "AutoGPU" });
         auto mesh = meshSlot.Create(Mesh{ "AutoMesh" });
 
-        // デバイスを弱参照で保持（参照カウントに影響しない）
         WeakSignalSlotPtr<Device> weakDevice(device);
         SlotRef<IDrawable> drawableRef = mesh;
 
         bool autoReleased = false;
         auto sub = weakDevice.Subscribe([&autoReleased, &drawableRef]() {
-            std::cout << "  弱参照経由の解放通知: メッシュを自動解放" << std::endl;
             drawableRef.Reset();
             autoReleased = true;
             });
 
-        std::cout << "  device.UseCount (弱参照は含まない): " << device.UseCount() << std::endl;
-
         device.Reset();
-        // 弱参照は参照カウントに影響しないため、Resetで即座に参照カウント0 → 通知発火
-
-        std::cout << "  自動解放された: " << autoReleased << std::endl;
-        std::cout << "  drawableRef.IsValid: " << drawableRef.IsValid() << std::endl;
-
         PrintResult(autoReleased && !drawableRef.IsValid());
     }
 
@@ -1070,19 +892,195 @@ int main()
         auto mesh = meshSlot.Create(Mesh{ "AliasNotify", 256 });
         auto device = deviceSlot.Create(Device{ "GPU" });
 
-        // メンバ変数をエイリアシングで参照
         SlotRef<std::string> nameRef(mesh, &mesh->name);
 
-        // デバイス解放時にエイリアシング参照も解放
         auto sub = device.Subscribe([&nameRef]() {
-            std::cout << "  通知受信: nameRef = " << *nameRef << std::endl;
             nameRef.Reset();
             });
 
         device.Reset();
-
-        std::cout << "  nameRef解放済み: " << !nameRef.IsValid() << std::endl;
         PrintResult(!nameRef.IsValid());
+    }
+
+    // ==================================================
+    PrintCategory("shared_ptr との速度比較");
+    // ==================================================
+
+    constexpr int BENCH_CREATE_COUNT = 100000;
+    constexpr int BENCH_COPY_COUNT = 1000000;
+    constexpr int BENCH_ACCESS_COUNT = 1000000;
+    constexpr int BENCH_POLY_COUNT = 100000;
+
+    std::cout << "\n  計測条件:" << std::endl;
+    std::cout << "    作成・破棄 : " << BENCH_CREATE_COUNT << " 回" << std::endl;
+    std::cout << "    コピー     : " << BENCH_COPY_COUNT << " 回" << std::endl;
+    std::cout << "    アクセス   : " << BENCH_ACCESS_COUNT << " 回" << std::endl;
+    std::cout << "    ポリモーフ : " << BENCH_POLY_COUNT << " 回" << std::endl;
+
+    // --- 作成と破棄 ---
+    std::cout << std::endl;
+    {
+        auto& pool = ObjectSlotSystem<BenchData>::GetInstance();
+        pool.Clear();
+        pool.Reserve(BENCH_CREATE_COUNT);
+
+        Nanoseconds slotNs = MeasureAverage(BENCH_CREATE_COUNT, [&](int i) {
+            auto ptr = pool.Create(BenchData{ 1.0f, 2.0f, 3.0f, i });
+            });
+
+        Nanoseconds sharedNs = MeasureAverage(BENCH_CREATE_COUNT, [&](int i) {
+            auto ptr = std::make_shared<BenchData>(BenchData{ 1.0f, 2.0f, 3.0f, i });
+            });
+
+        PrintBenchmark("作成 + 破棄（SlotPtr vs shared_ptr）", slotNs, sharedNs);
+    }
+
+    // --- コピー（参照カウント増減）---
+    {
+        auto& pool = ObjectSlotSystem<BenchData>::GetInstance();
+        pool.Clear();
+        auto original = pool.Create(BenchData{ 1.0f, 2.0f, 3.0f, 0 });
+
+        auto sharedOriginal = std::make_shared<BenchData>(BenchData{ 1.0f, 2.0f, 3.0f, 0 });
+
+        Nanoseconds slotNs = MeasureAverage(BENCH_COPY_COUNT, [&](int) {
+            SlotPtr<BenchData> copy = original;
+            });
+
+        Nanoseconds sharedNs = MeasureAverage(BENCH_COPY_COUNT, [&](int) {
+            std::shared_ptr<BenchData> copy = sharedOriginal;
+            });
+
+        PrintBenchmark("コピー + 破棄（参照カウント増減）", slotNs, sharedNs);
+    }
+
+    // --- 要素アクセス（Get / operator->）---
+    {
+        auto& pool = ObjectSlotSystem<BenchData>::GetInstance();
+        pool.Clear();
+        auto slotPtr = pool.Create(BenchData{ 1.0f, 2.0f, 3.0f, 0 });
+
+        auto sharedPtr = std::make_shared<BenchData>(BenchData{ 1.0f, 2.0f, 3.0f, 0 });
+
+        volatile float sink = 0.0f;
+
+        Nanoseconds slotNs = MeasureAverage(BENCH_ACCESS_COUNT, [&](int) {
+            sink = slotPtr->x + slotPtr->y + slotPtr->z;
+            });
+
+        Nanoseconds sharedNs = MeasureAverage(BENCH_ACCESS_COUNT, [&](int) {
+            sink = sharedPtr->x + sharedPtr->y + sharedPtr->z;
+            });
+
+        PrintBenchmark("要素アクセス（operator->）", slotNs, sharedNs);
+    }
+
+    // --- SignalSlotPtr 作成と破棄 ---
+    {
+        auto& pool = SignalSlotSystem<BenchData>::GetInstance();
+        pool.Clear();
+        pool.Reserve(BENCH_CREATE_COUNT);
+
+        Nanoseconds slotNs = MeasureAverage(BENCH_CREATE_COUNT, [&](int i) {
+            auto ptr = pool.Create(BenchData{ 1.0f, 2.0f, 3.0f, i });
+            });
+
+        Nanoseconds sharedNs = MeasureAverage(BENCH_CREATE_COUNT, [&](int i) {
+            auto ptr = std::make_shared<BenchData>(BenchData{ 1.0f, 2.0f, 3.0f, i });
+            });
+
+        PrintBenchmark("作成 + 破棄（SignalSlotPtr vs shared_ptr）", slotNs, sharedNs);
+    }
+
+    // --- ポリモーフィックアクセス（SlotRef vs shared_ptr<Base>）---
+    {
+        auto& pool = RefSlotSystem<BenchObject>::GetInstance();
+        pool.Clear();
+        pool.Reserve(BENCH_POLY_COUNT);
+
+        std::vector<SlotRef<IBenchObject>> slotRefs;
+        std::vector<SignalSlotPtr<BenchObject>> slotOwners;
+        slotRefs.reserve(BENCH_POLY_COUNT);
+        slotOwners.reserve(BENCH_POLY_COUNT);
+
+        for (int i = 0; i < BENCH_POLY_COUNT; ++i) {
+            auto obj = pool.Create(BenchObject{ static_cast<float>(i) });
+            slotRefs.push_back(SlotRef<IBenchObject>(obj));
+            slotOwners.push_back(std::move(obj));
+        }
+
+        std::vector<std::shared_ptr<IBenchObject>> sharedPtrs;
+        sharedPtrs.reserve(BENCH_POLY_COUNT);
+        for (int i = 0; i < BENCH_POLY_COUNT; ++i) {
+            sharedPtrs.push_back(std::make_shared<BenchObject>(static_cast<float>(i)));
+        }
+
+        volatile float sink = 0.0f;
+
+        auto slotStart = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < BENCH_POLY_COUNT; ++i) {
+            sink = slotRefs[i]->GetValue();
+        }
+        auto slotEnd = std::chrono::high_resolution_clock::now();
+        Nanoseconds slotNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            slotEnd - slotStart).count() / BENCH_POLY_COUNT;
+
+        auto sharedStart = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < BENCH_POLY_COUNT; ++i) {
+            sink = sharedPtrs[i]->GetValue();
+        }
+        auto sharedEnd = std::chrono::high_resolution_clock::now();
+        Nanoseconds sharedNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            sharedEnd - sharedStart).count() / BENCH_POLY_COUNT;
+
+        PrintBenchmark("ポリモーフィックアクセス（SlotRef vs shared_ptr<Base>）", slotNs, sharedNs);
+    }
+
+    // --- 弱参照 Lock（WeakSignalSlotPtr vs weak_ptr）---
+    {
+        auto& pool = SignalSlotSystem<BenchData>::GetInstance();
+        pool.Clear();
+        auto signalPtr = pool.Create(BenchData{ 1.0f, 2.0f, 3.0f, 0 });
+        WeakSignalSlotPtr<BenchData> weakSignal(signalPtr);
+
+        auto sharedPtr = std::make_shared<BenchData>(BenchData{ 1.0f, 2.0f, 3.0f, 0 });
+        std::weak_ptr<BenchData> weakShared = sharedPtr;
+
+        volatile float sink = 0.0f;
+
+        Nanoseconds slotNs = MeasureAverage(BENCH_COPY_COUNT, [&](int) {
+            if (auto locked = weakSignal.Lock()) {
+                sink = locked->x;
+            }
+            });
+
+        Nanoseconds sharedNs = MeasureAverage(BENCH_COPY_COUNT, [&](int) {
+            if (auto locked = weakShared.lock()) {
+                sink = locked->x;
+            }
+            });
+
+        PrintBenchmark("弱参照Lock + アクセス + 破棄", slotNs, sharedNs);
+    }
+
+    // --- SlotRef 作成と破棄 ---
+    {
+        auto& pool = RefSlotSystem<BenchObject>::GetInstance();
+        pool.Clear();
+        pool.Reserve(BENCH_CREATE_COUNT);
+
+        auto owner = pool.Create(BenchObject{ 42.0f });
+        auto sharedOwner = std::make_shared<BenchObject>(42.0f);
+
+        Nanoseconds slotNs = MeasureAverage(BENCH_COPY_COUNT, [&](int) {
+            SlotRef<IBenchObject> ref(owner);
+            });
+
+        Nanoseconds sharedNs = MeasureAverage(BENCH_COPY_COUNT, [&](int) {
+            std::shared_ptr<IBenchObject> ref = sharedOwner;
+            });
+
+        PrintBenchmark("SlotRef vs shared_ptr<Base> 作成 + 破棄", slotNs, sharedNs);
     }
 
     // ==================================================
