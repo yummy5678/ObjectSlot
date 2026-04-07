@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include "SubscriptionRef.h"
 
 // 前方宣言
 template<typename T>
@@ -15,6 +16,8 @@ class SignalSlotSystemBase;
  *
  * 購読者側がメンバ変数として保持することで、
  * 購読者の寿命と購読の寿命を一致させる。
+ *
+ * 型消去が必要な場面ではToRef()でSubscriptionRefに変換できる。
  *
  * コピー不可、ムーブ可能。
  *
@@ -106,6 +109,22 @@ public:
         {
             m_slot->UpdateSubscriptionCallback(m_slotIndex, m_subscriptionId, std::move(newCallback));
         }
+    }
+
+    /**
+     * @brief 非テンプレートのSubscriptionRefに変換する
+     *
+     * 所有権をSubscriptionRefに移転する。
+     * 変換後、元のSubscriptionは無効状態になる。
+     * 異なる型の購読を1つのコンテナで管理したい場合に使う。
+     *
+     * @return 購読の所有権を引き継いだSubscriptionRef
+     */
+    SubscriptionRef ToRef()
+    {
+        SubscriptionRef ref(m_slot, m_slotIndex, m_subscriptionId);
+        m_slot = nullptr;
+        return ref;
     }
 
     /// 購読が有効かどうかを判定

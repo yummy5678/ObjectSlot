@@ -53,8 +53,6 @@ public:
      * ポインタがプール外を指すエイリアシングの場合は
      * 全スロットをフォールバック検索する。
      *
-     * 購読が登録されている場合は購読も同時に解除する。
-     *
      * @param ptrLocation SlotRef内のm_ptrのアドレス
      * @return 対応するスロットインデックス。見つからない場合はINVALID_INDEX
      */
@@ -145,7 +143,7 @@ public:
         uint32_t subId = this->AddSubscription(entry->slotIndex, std::move(callback));
         return { entry->slotIndex, subId };
     }
-    
+
     /// 全SlotRefを無効化した後、プールを初期化する
     void Clear() {
         for (auto& entries : m_refEntriesPerSlot) {
@@ -173,9 +171,8 @@ protected:
     /**
      * @brief SlotRefの登録情報
      *
-     * SlotRef内のm_ptrのアドレス、スロットインデックス、
-     * および購読IDを保持する。
-     * 購読IDが有効な場合、SlotRef破棄時に購読も解除される。
+     * SlotRef内のm_ptrのアドレスと、
+     * 指しているスロットのインデックスを保持する。
      */
     struct RefEntry {
         /** SlotRef内のm_ptrのアドレス */
@@ -208,24 +205,32 @@ protected:
     /**
      * @brief 要素を削除する内部処理
      *
-     * この要素を指している全SlotRefのポインタをnullptrに設定し、
-     * RefEntryリストをクリアした後、
-     * 基底クラスの削除処理（購読者通知 → オブジェクトリセット）を呼ぶ。
+     * まず基底クラスの削除処理を呼ぶ。
+     * 基底が遅延削除を選択した場合（通知ループ中）、
+     * 要素はまだ生存しているためSlotRefの無効化は行わない。
+     * 遅延削除が後で実行される際に再びこの関数が呼ばれ、
+     * その時点でSlotRefが無効化される。
      *
-     * 購読の解除は基底クラスのRemoveInternalで
-     * 購読リスト全体がクリアされるため、個別解除は不要。
+     * 基底が即座に削除を実行した場合は、
+     * 通知完了後にSlotRefのポインタをnullptrに設定する。
+     * これにより購読者のコールバック内でSlotRef経由のアクセスが可能になる。
      *
      * @param handle 削除する要素のハンドル
      */
     void RemoveInternal(SlotHandle handle) override {
-        if (handle.index < m_refEntriesPerSlot.size()) {
-            for (auto& entry : m_refEntriesPerSlot[handle.index]) {
-                *entry.ptrLocation = nullptr;
-            }
-            m_refEntriesPerSlot[handle.index].clear();
-        }
-
+        // 基底の処理（遅延される可能性がある）
         SignalSlotSystemBase<T>::RemoveInternal(handle);
+
+        // 基底が遅延削除を選択した場合、要素はまだ生存している
+        // m_aliveがfalseなら実際に削除が実行されたので、SlotRefを無効化する
+        if (handle.index < this->m_alive.size() && !this->m_alive[handle.index]) {
+            if (handle.index < m_refEntriesPerSlot.size()) {
+                for (auto& entry : m_refEntriesPerSlot[handle.index]) {
+                    *entry.ptrLocation = nullptr;
+                }
+                m_refEntriesPerSlot[handle.index].clear();
+            }
+        }
     }
 
 private:

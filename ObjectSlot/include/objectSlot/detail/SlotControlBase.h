@@ -23,7 +23,7 @@ public:
 
     /// ハンドルが有効かどうかを検証
     bool IsValidHandle(SlotHandle handle) const {
-        if (handle.index == SlotHandle::INVALID_INDEX) {
+        if (handle.index >= m_alive.size()) {
             return false;
         }
         if (!m_alive[handle.index]) {

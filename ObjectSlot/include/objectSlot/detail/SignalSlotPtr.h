@@ -142,9 +142,7 @@ public:
 
     /// 別のSignalSlotPtrと内容を交換
     void Swap(SignalSlotPtr& other) noexcept {
-        auto tmp = m_root_ptr;
-        m_root_ptr = other.m_root_ptr;
-        other.m_root_ptr = tmp;
+        std::swap(m_root_ptr, other.m_root_ptr);
         std::swap(m_slot, other.m_slot);
     }
 
