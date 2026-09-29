@@ -1,0 +1,8 @@
+.vs/
+*.user
+build/vs/bin/
+build/vs/obj/
+build/cmake*/
+out/
+desktop.ini
+Thumbs.db
