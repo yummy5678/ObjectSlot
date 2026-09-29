@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="ソース ファイル">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="ヘッダー ファイル">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\detail">
+      <UniqueIdentifier>{A1B2C3D4-0001-4000-8000-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\experimental_detail">
+      <UniqueIdentifier>{A1B2C3D4-0002-4000-8000-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ヘッダー ファイル\thirdparty">
+      <UniqueIdentifier>{A1B2C3D4-0003-4000-8000-000000000003}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="リソース ファイル">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\tests\main.cpp">
+      <Filter>ソース ファイル</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\include\objectSlot\ObjectSlot.h">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\EnableSlotFromThis.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\ObjectSlotSystem.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\ObjectSlotSystemBase.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\RefSlotSystem.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\SignalSlotPtr.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\SignalSlotSystem.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\SignalSlotSystemBase.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\SlotControlBase.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\SlotHandle.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\SlotPtr.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\SlotRef.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\SlotTraits.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\Subscription.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\SubscriptionRef.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\WeakSignalSlotPtr.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\detail\WeakSlotPtr.h">
+      <Filter>ヘッダー ファイル\detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\EnableSlotFromThis.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\ObjectSlotSystem.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\ObjectSlotSystemBase.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\RefSlotSystem.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SignalSlotPtr.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SignalSlotSystem.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SignalSlotSystemBase.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SlotControlBase.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SlotHandle.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SlotHeader.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SlotPtr.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SlotRef.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SlotStorage.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SlotTraits.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\Subscription.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\SubscriptionRef.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\WeakSignalSlotPtr.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\experimental_detail\WeakSlotPtr.h">
+      <Filter>ヘッダー ファイル\experimental_detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\thirdparty\rootVector\RootVector.h">
+      <Filter>ヘッダー ファイル\thirdparty</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\include\objectSlot\thirdparty\rootVector\VirtualMemoryAllocator.h">
+      <Filter>ヘッダー ファイル\thirdparty</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="..\..\tools\ObjectSlot.natvis">
+      <Filter>リソース ファイル</Filter>
+    </Natvis>
+  </ItemGroup>
+</Project>

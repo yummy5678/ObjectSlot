@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ObjectSlot ライブラリのデバッガ表示定義
+
+  【使い方】
+  Visual Studio のプロジェクトに「既存の項目の追加」でこのファイルを加えるか、
+  %USERPROFILE%\Documents\Visual Studio 2022\Visualizers\ に置く。
+
+  【通常の実装（detail/）】
+  SlotPtr は「プールへのポインタ ＋ スロット番号」。要素はプールの位置一覧
+  m_locationData[番号] から辿る。
+
+  【実験版（experimental_detail/）】
+  SlotPtr は 32 ビットの圧縮値（区画番号 4bit ＋ スロット番号 28bit）だけを持つ。
+  次の式で復元する。
+    区画の先頭   = s_arenaBase + (値 & 0xF0000000)
+    位置表の項目 = 区画の先頭 + 番号 × 4（位置表は区画の先頭にある）
+    要素本体     = s_arenaBase + 位置表の項目の値
+    見出し       = 区画の先頭 + 見出しの開始オフセット + 番号 × 16
+  見出しの開始オフセットは SlotStorage<T> の定数と同じ式を展開している（デバッガから
+  定数を参照できない場合に備えて）。SlotRef は見出しのアドレスから区画の先頭を求め、
+  自分の圧縮値で位置表を引く。
+
+  同じ型名に両実装の定義を置き、通常の実装用には Priority="Low" を付けている。
+  デバッガは評価に成功した定義を使うため、どちらの実装でも正しく表示される。
+-->
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <Type Name="SlotHeader">
+    <DisplayString>参照数={refCount} 世代={generation} プール番号={poolId}</DisplayString>
+  </Type>
+
+  <Type Name="SlotHandle">
+    <DisplayString Condition="index == 0xFFFFFFFF">無効</DisplayString>
+    <DisplayString>番号={index} 世代={generation}</DisplayString>
+  </Type>
+
+  <!-- ============================================================ -->
+  <!-- 実験版                                                         -->
+  <!-- ============================================================ -->
+  <Type Name="SlotPtr&lt;*&gt;">
+    <DisplayString Condition="m_value == 0xFFFFFFFF">無効</DisplayString>
+    <DisplayString Condition="SlotStorage&lt;$T1&gt;::s_arenaBase != 0">タグ={m_value &gt;&gt; 28} 番号={(m_value &amp; 0x0FFFFFFF)} 参照数={((SlotHeader*)((SlotStorage&lt;$T1&gt;::s_arenaBase + (m_value &amp; 0xF0000000)) + (((((0x10000000 - 131072) / (sizeof($T1) + 20))) * 4 + 65535) / 65536 * 65536) + (m_value &amp; 0x0FFFFFFF) * 16))->refCount} {*(($T1*)(SlotStorage&lt;$T1&gt;::s_arenaBase + (*(unsigned int*)((SlotStorage&lt;$T1&gt;::s_arenaBase + (m_value &amp; 0xF0000000)) + (m_value &amp; 0x0FFFFFFF) * 4))))}</DisplayString>
+    <DisplayString>圧縮値={m_value,x}</DisplayString>
+    <Expand>
+      <Item Name="[タグ]" Condition="m_value != 0xFFFFFFFF">m_value &gt;&gt; 28</Item>
+      <Item Name="[スロット番号]" Condition="m_value != 0xFFFFFFFF">(m_value &amp; 0x0FFFFFFF)</Item>
+      <Item Name="[見出し]" Condition="m_value != 0xFFFFFFFF &amp;&amp; SlotStorage&lt;$T1&gt;::s_arenaBase != 0">*((SlotHeader*)((SlotStorage&lt;$T1&gt;::s_arenaBase + (m_value &amp; 0xF0000000)) + (((((0x10000000 - 131072) / (sizeof($T1) + 20))) * 4 + 65535) / 65536 * 65536) + (m_value &amp; 0x0FFFFFFF) * 16))</Item>
+      <Item Name="[要素]" Condition="m_value != 0xFFFFFFFF &amp;&amp; SlotStorage&lt;$T1&gt;::s_arenaBase != 0">*(($T1*)(SlotStorage&lt;$T1&gt;::s_arenaBase + (*(unsigned int*)((SlotStorage&lt;$T1&gt;::s_arenaBase + (m_value &amp; 0xF0000000)) + (m_value &amp; 0x0FFFFFFF) * 4))))</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="SignalSlotPtr&lt;*&gt;">
+    <DisplayString Condition="m_value == 0xFFFFFFFF">無効</DisplayString>
+    <DisplayString Condition="SlotStorage&lt;$T1&gt;::s_arenaBase != 0">タグ={m_value &gt;&gt; 28} 番号={(m_value &amp; 0x0FFFFFFF)} 参照数={((SlotHeader*)((SlotStorage&lt;$T1&gt;::s_arenaBase + (m_value &amp; 0xF0000000)) + (((((0x10000000 - 131072) / (sizeof($T1) + 20))) * 4 + 65535) / 65536 * 65536) + (m_value &amp; 0x0FFFFFFF) * 16))->refCount} {*(($T1*)(SlotStorage&lt;$T1&gt;::s_arenaBase + (*(unsigned int*)((SlotStorage&lt;$T1&gt;::s_arenaBase + (m_value &amp; 0xF0000000)) + (m_value &amp; 0x0FFFFFFF) * 4))))}</DisplayString>
+    <DisplayString>圧縮値={m_value,x}</DisplayString>
+    <Expand>
+      <Item Name="[タグ]" Condition="m_value != 0xFFFFFFFF">m_value &gt;&gt; 28</Item>
+      <Item Name="[スロット番号]" Condition="m_value != 0xFFFFFFFF">(m_value &amp; 0x0FFFFFFF)</Item>
+      <Item Name="[見出し]" Condition="m_value != 0xFFFFFFFF &amp;&amp; SlotStorage&lt;$T1&gt;::s_arenaBase != 0">*((SlotHeader*)((SlotStorage&lt;$T1&gt;::s_arenaBase + (m_value &amp; 0xF0000000)) + (((((0x10000000 - 131072) / (sizeof($T1) + 20))) * 4 + 65535) / 65536 * 65536) + (m_value &amp; 0x0FFFFFFF) * 16))</Item>
+      <Item Name="[要素]" Condition="m_value != 0xFFFFFFFF &amp;&amp; SlotStorage&lt;$T1&gt;::s_arenaBase != 0">*(($T1*)(SlotStorage&lt;$T1&gt;::s_arenaBase + (*(unsigned int*)((SlotStorage&lt;$T1&gt;::s_arenaBase + (m_value &amp; 0xF0000000)) + (m_value &amp; 0x0FFFFFFF) * 4))))</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="WeakSlotPtr&lt;*&gt;">
+    <DisplayString Condition="m_value == 0xFFFFFFFF">無効</DisplayString>
+    <DisplayString>弱参照 タグ={m_value &gt;&gt; 28} 番号={(m_value &amp; 0x0FFFFFFF)} 世代={m_generation}</DisplayString>
+    <Expand>
+      <Item Name="[タグ]">m_value &gt;&gt; 28</Item>
+      <Item Name="[スロット番号]">(m_value &amp; 0x0FFFFFFF)</Item>
+      <Item Name="[世代]">m_generation</Item>
+      <Item Name="[現在の見出し]" Condition="m_value != 0xFFFFFFFF &amp;&amp; SlotStorage&lt;$T1&gt;::s_arenaBase != 0">*((SlotHeader*)((SlotStorage&lt;$T1&gt;::s_arenaBase + (m_value &amp; 0xF0000000)) + (((((0x10000000 - 131072) / (sizeof($T1) + 20))) * 4 + 65535) / 65536 * 65536) + (m_value &amp; 0x0FFFFFFF) * 16))</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="WeakSignalSlotPtr&lt;*&gt;">
+    <DisplayString Condition="m_value == 0xFFFFFFFF">無効</DisplayString>
+    <DisplayString>弱参照 タグ={m_value &gt;&gt; 28} 番号={(m_value &amp; 0x0FFFFFFF)} 世代={m_generation}</DisplayString>
+    <Expand>
+      <Item Name="[タグ]">m_value &gt;&gt; 28</Item>
+      <Item Name="[スロット番号]">(m_value &amp; 0x0FFFFFFF)</Item>
+      <Item Name="[世代]">m_generation</Item>
+      <Item Name="[現在の見出し]" Condition="m_value != 0xFFFFFFFF &amp;&amp; SlotStorage&lt;$T1&gt;::s_arenaBase != 0">*((SlotHeader*)((SlotStorage&lt;$T1&gt;::s_arenaBase + (m_value &amp; 0xF0000000)) + (((((0x10000000 - 131072) / (sizeof($T1) + 20))) * 4 + 65535) / 65536 * 65536) + (m_value &amp; 0x0FFFFFFF) * 16))</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="SlotRef&lt;*&gt;">
+    <DisplayString Condition="m_header == 0">無効</DisplayString>
+    <DisplayString>{*m_header} → {*($T1*)((char*)(((unsigned __int64)m_header &amp; ~(unsigned __int64)0x0FFFFFFF) + (*(unsigned int*)(((unsigned __int64)m_header &amp; ~(unsigned __int64)0x0FFFFFFF) + (m_value &amp; 0x0FFFFFFF) * 4) &amp; 0x0FFFFFFF)) + m_adjust)}</DisplayString>
+    <Expand>
+      <Item Name="[見出し]" Condition="m_header != 0">*m_header</Item>
+      <Item Name="[要素]" Condition="m_header != 0">*($T1*)((char*)(((unsigned __int64)m_header &amp; ~(unsigned __int64)0x0FFFFFFF) + (*(unsigned int*)(((unsigned __int64)m_header &amp; ~(unsigned __int64)0x0FFFFFFF) + (m_value &amp; 0x0FFFFFFF) * 4) &amp; 0x0FFFFFFF)) + m_adjust)</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Subscription&lt;*&gt;">
+    <DisplayString Condition="m_slotValue == 0xFFFFFFFF">無効</DisplayString>
+    <DisplayString>購読 タグ={m_slotValue &gt;&gt; 28} 番号={m_slotValue &amp; 0x0FFFFFFF} ID={m_subscriptionId}</DisplayString>
+  </Type>
+
+  <Type Name="SubscriptionRef">
+    <DisplayString Condition="m_poolId == 0xFFFFFFFF">無効</DisplayString>
+    <DisplayString>購読 プール番号={m_poolId} 番号={m_slotIndex} ID={m_subscriptionId}</DisplayString>
+  </Type>
+
+  <!-- ============================================================ -->
+  <!-- 通常の実装（実験版の定義が評価できない時に使われる）           -->
+  <!-- ============================================================ -->
+  <Type Name="SlotPtr&lt;*&gt;" Priority="Low">
+    <DisplayString Condition="m_slot == 0">無効</DisplayString>
+    <DisplayString>番号={m_index} {*($T1*)m_slot->m_locationData[m_index]}</DisplayString>
+    <Expand>
+      <Item Name="[スロット番号]" Condition="m_slot != 0">m_index</Item>
+      <Item Name="[要素]" Condition="m_slot != 0">*($T1*)m_slot->m_locationData[m_index]</Item>
+      <Item Name="[プール]" Condition="m_slot != 0">m_slot</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="SignalSlotPtr&lt;*&gt;" Priority="Low">
+    <DisplayString Condition="m_slot == 0">無効</DisplayString>
+    <DisplayString>番号={m_index} {*($T1*)m_slot->m_locationData[m_index]}</DisplayString>
+    <Expand>
+      <Item Name="[スロット番号]" Condition="m_slot != 0">m_index</Item>
+      <Item Name="[要素]" Condition="m_slot != 0">*($T1*)m_slot->m_locationData[m_index]</Item>
+      <Item Name="[プール]" Condition="m_slot != 0">m_slot</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="WeakSlotPtr&lt;*&gt;" Priority="Low">
+    <DisplayString Condition="m_slot == 0">無効</DisplayString>
+    <DisplayString>弱参照 {m_handle}</DisplayString>
+  </Type>
+
+  <Type Name="WeakSignalSlotPtr&lt;*&gt;" Priority="Low">
+    <DisplayString Condition="m_slot == 0">無効</DisplayString>
+    <DisplayString>弱参照 {m_handle}</DisplayString>
+  </Type>
+
+  <Type Name="SlotRef&lt;*&gt;" Priority="Low">
+    <DisplayString Condition="m_control == 0">無効</DisplayString>
+    <DisplayString>番号={m_index} {*($T1*)((char*)m_control->m_locationData[m_index] + m_adjust)}</DisplayString>
+    <Expand>
+      <Item Name="[要素]" Condition="m_control != 0">*($T1*)((char*)m_control->m_locationData[m_index] + m_adjust)</Item>
+      <Item Name="[プール]" Condition="m_control != 0">m_control</Item>
+    </Expand>
+  </Type>
+
+  <Type Name="Subscription&lt;*&gt;" Priority="Low">
+    <DisplayString Condition="m_slot == 0">無効</DisplayString>
+    <DisplayString>購読 番号={m_slotIndex} ID={m_subscriptionId}</DisplayString>
+  </Type>
+
+  <Type Name="SubscriptionRef" Priority="Low">
+    <DisplayString Condition="m_control == 0">無効</DisplayString>
+    <DisplayString>購読 番号={m_slotIndex} ID={m_subscriptionId}</DisplayString>
+  </Type>
+
+</AutoVisualizer>
