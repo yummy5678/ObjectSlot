@@ -60,7 +60,9 @@ struct SlotStorageMath {
  *   本体              = sizeof(T) 間隔で並ぶ。Compact で先頭に寄せられる
  *
  * 【領域の配置（共有領域方式）】
- * - 型ごとに4GBの仮想アドレス空間を4GB境界に揃えて1つ予約する
+ * - 型ごとに4GBの仮想アドレス空間を1つ予約する（アドレスは「基底＋32ビットの値」で求める）
+ * - 領域は区画の大きさ（256MB）の境界に揃える。SlotRef が見出しのアドレスから
+ *   区画の先頭をマスク演算で逆算するためで、SlotPtr のアクセスには揃えは不要
  * - 256MBずつ16区画に分け、プールはタグ番号の区画を使う（区画15は無効値用）
  * - 区画の中を「位置表」「見出しの並び」「本体の並び」の3つに分ける
  * - 位置表を区画の先頭に置くので、項目のアドレスは「区画の先頭＋番号×4」で
@@ -94,8 +96,8 @@ public:
     /** 型ごとに予約する共有領域のバイト数 */
     static constexpr size_t ARENA_BYTES = static_cast<size_t>(1) << 32;
 
-    /** 共有領域の先頭を揃える境界（下位32ビットを0にするため4GB） */
-    static constexpr size_t ARENA_ALIGNMENT = static_cast<size_t>(1) << 32;
+    /** 共有領域の先頭を揃える境界（区画の大きさ。SlotRef が見出しのアドレスから区画の先頭を逆算するため） */
+    static constexpr size_t ARENA_ALIGNMENT = SlotValue::REGION_BYTES;
 
     /** 各並びの先頭を揃える境界（並びごとに別々にコミットするため、どの環境のページ境界にも乗る64KBにする） */
     static constexpr size_t AREA_ALIGNMENT = 65536;
@@ -169,7 +171,7 @@ public:
     /**
      * @brief 本体の位置（位置表の値）から本体のアドレスを求める（検証なし）
      *
-     * 共有領域は4GB境界に揃っているので、基底アドレスと値の足し算1つで求まる。
+     * 基底アドレスと値の足し算1つで求まる（ロード命令のアドレス計算に畳み込まれる）。
      */
     static T* BodyAt(uint32_t bodyValue) {
         return reinterpret_cast<T*>(s_arenaBase + bodyValue);
@@ -510,6 +512,6 @@ private:
     size_t m_committedTableBytes = 0;
     size_t m_committedHeaderBytes = 0;
 
-    /** 型ごとの共有領域の基底アドレス（4GB境界。未予約なら0） */
+    /** 型ごとの共有領域の基底アドレス（256MB境界。未予約なら0） */
     static inline uintptr_t s_arenaBase = 0;
 };
